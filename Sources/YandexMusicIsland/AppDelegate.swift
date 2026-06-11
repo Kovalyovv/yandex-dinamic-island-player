@@ -46,12 +46,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 
+                // If it's a live stream (e.g. Twitch), just ignore the update.
+                // The widget will stay on screen showing the last valid music state (paused).
                 if !state.isValidMedia {
-                    if self.panel.isVisible {
-                        self.panel.orderOut(nil)
-                    }
                     return
-                } else if !self.panel.isVisible && !self.isUserHidden {
+                }
+                
+                // Ensure it's visible if we hid it internally before (legacy support)
+                if !self.panel.isVisible && !self.isUserHidden {
                     self.panel.makeKeyAndOrderFront(nil)
                 }
                 
