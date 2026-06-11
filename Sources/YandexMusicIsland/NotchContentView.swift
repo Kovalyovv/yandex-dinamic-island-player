@@ -92,7 +92,6 @@ class NotchContentView: NSView {
         v.wantsLayer = true
         v.layer?.cornerRadius = 12
         v.layer?.masksToBounds = true
-        v.imageScaling = .scaleProportionallyUpOrDown
         return v
     }()
 
