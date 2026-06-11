@@ -281,6 +281,8 @@ class NotchContentView: NSView {
             height: expandedRect.height
         )
 
+        compactMarquee.isRunning = false
+
         if animated {
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.25
@@ -295,6 +297,8 @@ class NotchContentView: NSView {
                 
                 self.compactContainer.animator().alphaValue = self.isExpanded ? 0 : 1
                 self.expandedContainer.animator().alphaValue = self.isExpanded ? 1 : 0
+            }, completionHandler: {
+                self.compactMarquee.isRunning = !self.isExpanded
             })
         } else {
             bgView.frame = targetBgRect
@@ -305,6 +309,8 @@ class NotchContentView: NSView {
             
             compactContainer.alphaValue = isExpanded ? 0 : 1
             expandedContainer.alphaValue = isExpanded ? 1 : 0
+            
+            compactMarquee.isRunning = !isExpanded
         }
     }
 

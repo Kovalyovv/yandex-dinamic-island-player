@@ -44,7 +44,11 @@ class MarqueeLabel: NSView {
         }
     }
 
+    var isRunning: Bool = true
+    
     private func tick() {
+        guard isRunning else { return }
+        
         // Calculate text width
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
         textWidth = (text as NSString).size(withAttributes: attrs).width
