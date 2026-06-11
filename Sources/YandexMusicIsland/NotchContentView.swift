@@ -87,8 +87,8 @@ class NotchContentView: NSView {
     }()
 
     // MARK: - Expanded Elements
-    private let expandedArtwork: NSImageView = {
-        let v = NSImageView()
+    private let expandedArtwork: InteractiveArtworkView = {
+        let v = InteractiveArtworkView()
         v.wantsLayer = true
         v.layer?.cornerRadius = 12
         v.layer?.masksToBounds = true
@@ -186,6 +186,44 @@ class NotchContentView: NSView {
         setup()
     }
 
+    private func openPlayingApp() {
+        // Run nowplaying-cli get-raw to find bundle ID
+        DispatchQueue.global(qos: .userInitiated).async {
+            let task = Process()
+            // We use standard shell to resolve nowplaying-cli from PATH or fallback to hardcoded path
+            task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            task.arguments = ["-c", "/opt/homebrew/bin/nowplaying-cli get-raw || nowplaying-cli get-raw"]
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            do {
+                try task.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let str = String(data: data, encoding: .utf8) {
+                    if let range = str.range(of: "kMRMediaRemoteNowPlayingInfoClientBundleIdentifier = \"([^\"]+)\"", options: .regularExpression) {
+                        let match = String(str[range])
+                        let components = match.components(separatedBy: "\"")
+                        if components.count >= 2 {
+                            let bundleId = components[1]
+                            let openTask = Process()
+                            openTask.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                            openTask.arguments = ["-b", bundleId]
+                            try? openTask.run()
+                            return
+                        }
+                    }
+                }
+            } catch {
+                print("Failed to run nowplaying-cli")
+            }
+            
+            // Fallback to Yandex Music if nowplaying-cli isn't found or fails
+            let openTask = Process()
+            openTask.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            openTask.arguments = ["-b", "ru.yandex.desktop.music"]
+            try? openTask.run()
+        }
+    }
+
     private func setup() {
         wantsLayer = true
         layer?.masksToBounds = false
@@ -204,6 +242,9 @@ class NotchContentView: NSView {
 
         // Add expanded elements
         expandedContainer.addSubview(expandedArtwork)
+        expandedArtwork.onClick = { [weak self] in
+            self?.openPlayingApp()
+        }
         expandedContainer.addSubview(expandedTitle)
         expandedContainer.addSubview(expandedArtist)
         expandedContainer.addSubview(expandedProgress)
@@ -611,5 +652,99 @@ class EqualizerBarsView: NSView {
             bar.removeAllAnimations()
             bar.frame.size.height = 4
         }
+    }
+}
+
+// MARK: - Interactive Artwork View
+class InteractiveArtworkView: NSView {
+    private let imageView = NSImageView()
+    private let overlayLayer = CALayer()
+    private let iconView = NSImageView()
+    private let label = NSTextField(labelWithString: "Открыть")
+    
+    var onClick: (() -> Void)?
+    
+    var image: NSImage? {
+        get { return imageView.image }
+        set { imageView.image = newValue }
+    }
+    
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        setup()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+    
+    private func setup() {
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.masksToBounds = true
+        
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        addSubview(imageView)
+        
+        overlayLayer.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
+        overlayLayer.opacity = 0
+        layer?.addSublayer(overlayLayer)
+        
+        if let icon = NSImage(systemSymbolName: "arrow.up.forward.app", accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+            iconView.image = icon.withSymbolConfiguration(config)
+        }
+        iconView.contentTintColor = .white
+        iconView.alphaValue = 0
+        addSubview(iconView)
+        
+        label.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .white
+        label.alignment = .center
+        label.isEditable = false
+        label.isSelectable = false
+        label.isBordered = false
+        label.backgroundColor = .clear
+        label.alphaValue = 0
+        addSubview(label)
+    }
+    
+    override func layout() {
+        super.layout()
+        imageView.frame = bounds
+        overlayLayer.frame = bounds
+        
+        iconView.frame = NSRect(x: (bounds.width - 24) / 2, y: (bounds.height / 2), width: 24, height: 24)
+        label.frame = NSRect(x: 0, y: (bounds.height / 2) - 20, width: bounds.width, height: 16)
+    }
+    
+    override func mouseEntered(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            overlayLayer.opacity = 1
+            iconView.animator().alphaValue = 1
+            label.animator().alphaValue = 1
+        }
+    }
+    
+    override func mouseExited(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            overlayLayer.opacity = 0
+            iconView.animator().alphaValue = 0
+            label.animator().alphaValue = 0
+        }
+    }
+    
+    override func mouseDown(with event: NSEvent) {
+        onClick?()
+    }
+    
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach { removeTrackingArea($0) }
+        let trackingArea = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
+        addTrackingArea(trackingArea)
     }
 }
