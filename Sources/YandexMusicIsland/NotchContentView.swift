@@ -354,37 +354,41 @@ class NotchContentView: NSView {
     }
 
     private func layoutExpandedContainer(_ bounds: NSRect) {
-        let centerX = bounds.width / 2
-
+        let margin: CGFloat = 20
         let artSize: CGFloat = 80
-        expandedArtwork.frame = NSRect(x: 20, y: (bounds.height - artSize) / 2, width: artSize, height: artSize)
+        expandedArtwork.frame = NSRect(x: margin, y: (bounds.height - artSize) / 2, width: artSize, height: artSize)
 
         let eqW: CGFloat = 24
         let eqH: CGFloat = 20
-        expandedEq.frame = NSRect(x: bounds.width - 20 - eqW, y: (bounds.height - eqH) / 2, width: eqW, height: eqH)
+        let eqX = bounds.width - margin - eqW
+        expandedEq.frame = NSRect(x: eqX, y: (bounds.height - eqH) / 2, width: eqW, height: eqH)
+
+        // Calculate the exact center between the artwork and the EQ to ensure perfectly equal gaps
+        let artMaxX = expandedArtwork.frame.maxX
+        let centerBlockX = artMaxX + (eqX - artMaxX) / 2
 
         let textW: CGFloat = 240
         let topY = bounds.height - 35
         
-        expandedTitle.frame = NSRect(x: centerX - textW/2, y: topY - 20, width: textW, height: 20)
-        expandedArtist.frame = NSRect(x: centerX - textW/2, y: topY - 40, width: textW, height: 16)
+        expandedTitle.frame = NSRect(x: centerBlockX - textW/2, y: topY - 20, width: textW, height: 20)
+        expandedArtist.frame = NSRect(x: centerBlockX - textW/2, y: topY - 40, width: textW, height: 16)
 
         let progressY = topY - 60
         let progressW: CGFloat = 160
-        expandedProgress.frame = NSRect(x: centerX - progressW/2, y: progressY - 8, width: progressW, height: 20)
+        expandedProgress.frame = NSRect(x: centerBlockX - progressW/2, y: progressY - 8, width: progressW, height: 20)
 
         let timeW: CGFloat = 40
-        expandedElapsed.frame = NSRect(x: centerX - progressW/2 - timeW - 8, y: progressY - 5, width: timeW, height: 14)
-        expandedDuration.frame = NSRect(x: centerX + progressW/2 + 8, y: progressY - 5, width: timeW, height: 14)
+        expandedElapsed.frame = NSRect(x: centerBlockX - progressW/2 - timeW - 8, y: progressY - 5, width: timeW, height: 14)
+        expandedDuration.frame = NSRect(x: centerBlockX + progressW/2 + 8, y: progressY - 5, width: timeW, height: 14)
 
         let controlsY = progressY - 30
         let btnSize: CGFloat = 24
         let playSize: CGFloat = 32
         let spacing: CGFloat = 30
 
-        expandedPlayPause.frame = NSRect(x: centerX - playSize/2, y: controlsY - playSize/2 + 4, width: playSize, height: playSize)
-        expandedPrev.frame = NSRect(x: centerX - spacing - playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
-        expandedNext.frame = NSRect(x: centerX + spacing + playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
+        expandedPlayPause.frame = NSRect(x: centerBlockX - playSize/2, y: controlsY - playSize/2 + 4, width: playSize, height: playSize)
+        expandedPrev.frame = NSRect(x: centerBlockX - spacing - playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
+        expandedNext.frame = NSRect(x: centerBlockX + spacing + playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
     }
 
     // MARK: - State Management
