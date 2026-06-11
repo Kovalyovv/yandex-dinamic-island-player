@@ -11,7 +11,7 @@ class NotchContentView: NSView {
         return saved > 0 ? CGFloat(saved) : 300
     }
     var notchWidth: CGFloat = 240
-    var expandedPlayerWidth: CGFloat = 500
+    var expandedPlayerWidth: CGFloat = 440
 
     static let expandedHeight: CGFloat = 150
     static let expandedWidth: CGFloat = 1400
