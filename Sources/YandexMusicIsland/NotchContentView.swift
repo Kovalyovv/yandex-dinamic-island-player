@@ -575,6 +575,10 @@ class GradientProgressBar: NSView {
         let percentage = Double(localPoint.x / bounds.width)
         onSeek?(max(0, min(1, percentage)))
     }
+    
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
     override init(frame: NSRect) { super.init(frame: frame) ; wantsLayer = true }
     required init?(coder: NSCoder) { super.init(coder: coder) ; wantsLayer = true }
     override func draw(_ dirtyRect: NSRect) {
@@ -738,6 +742,10 @@ class InteractiveArtworkView: NSView {
     
     override func mouseDown(with event: NSEvent) {
         onClick?()
+    }
+    
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
     }
     
     override func updateTrackingAreas() {
