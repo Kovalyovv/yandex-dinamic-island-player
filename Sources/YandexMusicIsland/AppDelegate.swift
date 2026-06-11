@@ -44,7 +44,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mediaBridge = MediaControlBridge()
         mediaBridge.onUpdate = { [weak self] state in
             DispatchQueue.main.async {
-                self?.contentView.update(with: state)
+                guard let self = self else { return }
+                
+                if !state.isValidMedia {
+                    if self.panel.isVisible {
+                        self.panel.orderOut(nil)
+                    }
+                    return
+                } else if !self.panel.isVisible && !self.isUserHidden {
+                    self.panel.makeKeyAndOrderFront(nil)
+                }
+                
+                self.contentView.update(with: state)
             }
         }
         
@@ -112,10 +123,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         contentView.setCompactWidth(newWidth)
     }
 
+    private var isUserHidden: Bool = false
+
     @objc private func toggleVisibility() {
         if panel.isVisible {
+            isUserHidden = true
             panel.orderOut(nil)
         } else {
+            isUserHidden = false
             panel.makeKeyAndOrderFront(nil)
         }
     }

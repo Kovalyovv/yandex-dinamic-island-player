@@ -15,6 +15,13 @@ class NowPlayingState {
 
     var ignorePositionUpdatesUntil: Date?
 
+    /// Filter out invalid or unwanted media like live streams (Twitch)
+    var isValidMedia: Bool {
+        if title.isEmpty && artist.isEmpty { return false }
+        if duration <= 0 { return false }
+        return true
+    }
+
     /// Computed: estimate current elapsed time based on timestamp
     var estimatedElapsedTime: Double {
         guard isPlaying, timestamp > 0 else { return elapsedTime }
