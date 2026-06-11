@@ -169,6 +169,7 @@ class NotchContentView: NSView {
     private(set) var isExpanded: Bool = false
     private var mediaBridge: MediaControlBridge?
     private var progressTimer: Timer?
+    private var collapseTimer: Timer?
     private var currentState: NowPlayingState?
 
     var onToggleExpand: (() -> Void)?
@@ -425,6 +426,8 @@ class NotchContentView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         if !expandOnHover { return }
+        collapseTimer?.invalidate()
+        
         if !isExpanded {
             if let window = self.window as? NotchPanel {
                 window.expandAnimated()
@@ -439,10 +442,16 @@ class NotchContentView: NSView {
         if currentTargetBgRect.contains(localPoint) { return }
 
         if isExpanded {
-            if let window = self.window as? NotchPanel {
-                window.collapseAnimated()
+            collapseTimer?.invalidate()
+            collapseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+                guard let self = self else { return }
+                if self.isExpanded {
+                    if let window = self.window as? NotchPanel {
+                        window.collapseAnimated()
+                    }
+                    self.setExpanded(false, animated: true)
+                }
             }
-            setExpanded(false, animated: true)
         }
     }
 
