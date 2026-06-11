@@ -32,7 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.repositionAtNotch()
 
         // Setup global click outside to dismiss
-        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
             guard let self = self else { return }
             if self.panel.isExpanded {
                 self.panel.collapseAnimated()
@@ -78,12 +78,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var expandOnHoverMenuItem: NSMenuItem!
 
-    private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "Yandex Music Island")
-        }
-
+    private func buildContextMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Увеличить ширину (+)", action: #selector(increaseWidth), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Уменьшить ширину (-)", action: #selector(decreaseWidth), keyEquivalent: ""))
@@ -99,7 +94,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Выход", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
-        statusItem.menu = menu
+        return menu
+    }
+
+    private func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = statusItem.button {
+            button.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "Yandex Music Island")
+        }
+        statusItem.menu = buildContextMenu()
+    }
+
+    /// Called by NotchContentView/NotchPanel on right-click
+    func showContextMenu(at event: NSEvent) {
+        let menu = buildContextMenu()
+        NSMenu.popUpContextMenu(menu, with: event, for: contentView)
     }
 
     @objc private func toggleExpandOnHover() {

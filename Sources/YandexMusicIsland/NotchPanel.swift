@@ -101,6 +101,12 @@ class NotchPanel: NSPanel {
         }
     }
 
+    override func rightMouseDown(with event: NSEvent) {
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            appDelegate.showContextMenu(at: event)
+        }
+    }
+
     // CRITICAL: Prevent macOS from constraining the window below the menu bar / notch
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         return frameRect
