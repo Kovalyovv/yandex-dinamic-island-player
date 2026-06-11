@@ -49,10 +49,12 @@ class MediaControlBridge {
             let data = outPipe.fileHandleForReading.readDataToEndOfFile()
             if let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let payload = (dict["payload"] as? [String: Any]) ?? dict
-                self.state.update(from: payload)
-                DispatchQueue.main.async { [weak self] in
-                    guard let self = self else { return }
-                    self.onUpdate?(self.state)
+                if self.state.isValidPayload(payload) {
+                    self.state.update(from: payload)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.onUpdate?(self.state)
+                    }
                 }
             }
         } catch {

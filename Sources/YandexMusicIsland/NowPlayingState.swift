@@ -17,12 +17,12 @@ class NowPlayingState {
 
     /// Check if the incoming payload represents a valid music stream (not a live stream/Twitch)
     func isValidPayload(_ dict: [String: Any]) -> Bool {
-        let incomingTitle = dict["title"] as? String ?? self.title
-        let incomingArtist = dict["artist"] as? String ?? self.artist
-        let incomingDuration = dict["duration"] as? Double ?? self.duration
+        let incomingTitle = dict["title"] as? String ?? ""
+        let incomingArtist = dict["artist"] as? String ?? ""
+        let incomingDuration = dict["duration"] as? Double ?? 0
         
         if incomingTitle.isEmpty && incomingArtist.isEmpty { return false }
-        if incomingDuration <= 0 { return false }
+        if incomingDuration.isNaN || incomingDuration <= 0 { return false }
         return true
     }
 
