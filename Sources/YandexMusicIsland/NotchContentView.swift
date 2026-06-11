@@ -171,6 +171,7 @@ class NotchContentView: NSView {
     private var progressTimer: Timer?
     private var collapseTimer: Timer?
     private var currentState: NowPlayingState?
+    private var isAnimatingLayout: Bool = false
 
     var onToggleExpand: (() -> Void)?
 
@@ -272,24 +273,22 @@ class NotchContentView: NSView {
         currentTargetBgRect = targetBgRect
         updateHoverTrackingArea(rect: targetBgRect)
 
-        let compactLocalRect = NSRect(
-            x: compactRect.minX - targetBgRect.minX,
-            y: compactRect.minY - targetBgRect.minY,
-            width: compactRect.width,
-            height: compactRect.height
-        )
-        let expandedLocalRect = NSRect(
-            x: expandedRect.minX - targetBgRect.minX,
-            y: expandedRect.minY - targetBgRect.minY,
-            width: expandedRect.width,
-            height: expandedRect.height
-        )
+        let txCompact = compactRect.minX - targetBgRect.minX
+        let tyCompact = compactRect.minY - targetBgRect.minY
         
+        let txExpanded = expandedRect.minX - targetBgRect.minX
+        let tyExpanded = expandedRect.minY - targetBgRect.minY
+
         let maskRect = NSRect(origin: .zero, size: targetBgRect.size)
 
         compactMarquee.isRunning = false
+        
+        // Keep their bounds/frames constant so text doesn't re-layout or snap
+        compactContainer.frame = NSRect(origin: .zero, size: compactRect.size)
+        expandedContainer.frame = NSRect(origin: .zero, size: expandedRect.size)
 
         if animated {
+            isAnimatingLayout = true
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.25
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -301,10 +300,11 @@ class NotchContentView: NSView {
                 self.maskContainer.animator().frame = maskRect
                 self.maskContainer.layer?.cornerRadius = targetRadius
                 
-                self.compactContainer.animator().frame = compactLocalRect
-                self.expandedContainer.animator().frame = expandedLocalRect
+                self.compactContainer.layer?.transform = CATransform3DMakeTranslation(txCompact, tyCompact, 0)
+                self.expandedContainer.layer?.transform = CATransform3DMakeTranslation(txExpanded, tyExpanded, 0)
             }, completionHandler: {
                 self.compactMarquee.isRunning = !self.isExpanded
+                self.isAnimatingLayout = false
             })
             
             NSAnimationContext.runAnimationGroup({ context in
@@ -322,8 +322,8 @@ class NotchContentView: NSView {
             maskContainer.frame = maskRect
             maskContainer.layer?.cornerRadius = targetRadius
             
-            compactContainer.frame = compactLocalRect
-            expandedContainer.frame = expandedLocalRect
+            compactContainer.layer?.transform = CATransform3DMakeTranslation(txCompact, tyCompact, 0)
+            expandedContainer.layer?.transform = CATransform3DMakeTranslation(txExpanded, tyExpanded, 0)
             
             compactContainer.alphaValue = isExpanded ? 0 : 1
             expandedContainer.alphaValue = isExpanded ? 1 : 0
@@ -493,6 +493,7 @@ class NotchContentView: NSView {
     }
 
     private func updateProgressFromTimer() {
+        guard !isAnimatingLayout else { return }
         guard let state = currentState else { return }
         updateProgress(state)
     }
