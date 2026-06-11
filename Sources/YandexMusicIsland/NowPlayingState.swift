@@ -19,7 +19,11 @@ class NowPlayingState {
     func isValidPayload(_ dict: [String: Any]) -> Bool {
         let incomingTitle = dict["title"] as? String ?? ""
         let incomingArtist = dict["artist"] as? String ?? ""
-        let incomingDuration = dict["duration"] as? Double ?? 0
+        
+        var incomingDuration: Double = 0
+        if let num = dict["duration"] as? NSNumber {
+            incomingDuration = num.doubleValue
+        }
         
         if incomingTitle.isEmpty && incomingArtist.isEmpty { return false }
         if incomingDuration.isNaN || incomingDuration <= 0 { return false }
@@ -49,13 +53,13 @@ class NowPlayingState {
         if let v = dict["artist"] as? String { artist = v }
         if let v = dict["album"] as? String { album = v }
         if let v = dict["playing"] as? Bool { isPlaying = v }
-        if let v = dict["duration"] as? Double { duration = v }
+        if let num = dict["duration"] as? NSNumber { duration = num.doubleValue }
         
         let shouldIgnorePosition = ignorePositionUpdatesUntil != nil && Date() < ignorePositionUpdatesUntil!
         
         if !shouldIgnorePosition {
-            if let v = dict["elapsedTime"] as? Double { elapsedTime = v }
-            if let v = dict["elapsedTimeNow"] as? Double { elapsedTime = v }
+            if let num = dict["elapsedTime"] as? NSNumber { elapsedTime = num.doubleValue }
+            if let num = dict["elapsedTimeNow"] as? NSNumber { elapsedTime = num.doubleValue }
             
             if let v = dict["timestamp"] as? String {
                 let formatter = ISO8601DateFormatter()
@@ -68,7 +72,7 @@ class NowPlayingState {
             ignorePositionUpdatesUntil = nil
         }
         
-        if let v = dict["playbackRate"] as? Double { playbackRate = v }
+        if let num = dict["playbackRate"] as? NSNumber { playbackRate = num.doubleValue }
         if let v = dict["contentItemIdentifier"] as? String { contentItemIdentifier = v }
 
         // Artwork comes as base64 in the JSON
