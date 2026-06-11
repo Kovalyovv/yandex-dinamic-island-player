@@ -28,6 +28,13 @@ class NotchContentView: NSView {
     }()
 
     // MARK: - Containers
+    private let maskContainer: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.masksToBounds = true
+        return v
+    }()
+
     private let compactContainer: NSView = {
         let v = NSView()
         v.wantsLayer = true
@@ -182,10 +189,9 @@ class NotchContentView: NSView {
         layer?.masksToBounds = false
 
         addSubview(bgView)
-        bgView.addSubview(compactContainer)
-        bgView.addSubview(expandedContainer)
-        
-        bgView.layer?.masksToBounds = true
+        bgView.addSubview(maskContainer)
+        maskContainer.addSubview(compactContainer)
+        maskContainer.addSubview(expandedContainer)
 
         // Add compact elements
         compactContainer.addSubview(compactArtwork)
@@ -280,8 +286,13 @@ class NotchContentView: NSView {
             width: expandedRect.width,
             height: expandedRect.height
         )
+        
+        let maskRect = NSRect(origin: .zero, size: targetBgRect.size)
 
         compactMarquee.isRunning = false
+        if isExpanded {
+            compactMarquee.isHidden = true
+        }
 
         if animated {
             NSAnimationContext.runAnimationGroup({ context in
@@ -292,17 +303,26 @@ class NotchContentView: NSView {
                 self.bgView.animator().frame = targetBgRect
                 self.bgView.layer?.cornerRadius = targetRadius
                 
+                self.maskContainer.animator().frame = maskRect
+                self.maskContainer.layer?.cornerRadius = targetRadius
+                
                 self.compactContainer.animator().frame = compactLocalRect
                 self.expandedContainer.animator().frame = expandedLocalRect
                 
                 self.compactContainer.animator().alphaValue = self.isExpanded ? 0 : 1
                 self.expandedContainer.animator().alphaValue = self.isExpanded ? 1 : 0
             }, completionHandler: {
+                if !self.isExpanded {
+                    self.compactMarquee.isHidden = false
+                }
                 self.compactMarquee.isRunning = !self.isExpanded
             })
         } else {
             bgView.frame = targetBgRect
             bgView.layer?.cornerRadius = targetRadius
+            
+            maskContainer.frame = maskRect
+            maskContainer.layer?.cornerRadius = targetRadius
             
             compactContainer.frame = compactLocalRect
             expandedContainer.frame = expandedLocalRect
@@ -310,6 +330,9 @@ class NotchContentView: NSView {
             compactContainer.alphaValue = isExpanded ? 0 : 1
             expandedContainer.alphaValue = isExpanded ? 1 : 0
             
+            if !isExpanded {
+                compactMarquee.isHidden = false
+            }
             compactMarquee.isRunning = !isExpanded
         }
     }
