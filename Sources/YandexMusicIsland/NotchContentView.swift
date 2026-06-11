@@ -217,6 +217,7 @@ class NotchContentView: NSView {
             // Optimistic instant update
             state.elapsedTime = targetSeconds
             state.timestamp = Date().timeIntervalSince1970
+            state.ignorePositionUpdatesUntil = Date().addingTimeInterval(2.0)
             self.updateProgress(state)
             
             self.mediaBridge?.sendCommand("seek", String(targetSeconds))

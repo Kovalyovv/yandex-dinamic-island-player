@@ -13,6 +13,8 @@ class NowPlayingState {
     var playbackRate: Double = 0
     var contentItemIdentifier: String = ""
 
+    var ignorePositionUpdatesUntil: Date?
+
     /// Computed: estimate current elapsed time based on timestamp
     var estimatedElapsedTime: Double {
         guard isPlaying, timestamp > 0 else { return elapsedTime }
@@ -37,15 +39,22 @@ class NowPlayingState {
         if let v = dict["album"] as? String { album = v }
         if let v = dict["playing"] as? Bool { isPlaying = v }
         if let v = dict["duration"] as? Double { duration = v }
-        if let v = dict["elapsedTime"] as? Double { elapsedTime = v }
-        if let v = dict["elapsedTimeNow"] as? Double { elapsedTime = v }
         
-        if let v = dict["timestamp"] as? String {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: v) ?? ISO8601DateFormatter().date(from: v) {
-                timestamp = date.timeIntervalSince1970
+        let shouldIgnorePosition = ignorePositionUpdatesUntil != nil && Date() < ignorePositionUpdatesUntil!
+        
+        if !shouldIgnorePosition {
+            if let v = dict["elapsedTime"] as? Double { elapsedTime = v }
+            if let v = dict["elapsedTimeNow"] as? Double { elapsedTime = v }
+            
+            if let v = dict["timestamp"] as? String {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let date = formatter.date(from: v) ?? ISO8601DateFormatter().date(from: v) {
+                    timestamp = date.timeIntervalSince1970
+                }
             }
+        } else if let ignoreUntil = ignorePositionUpdatesUntil, Date() >= ignoreUntil {
+            ignorePositionUpdatesUntil = nil
         }
         
         if let v = dict["playbackRate"] as? Double { playbackRate = v }
