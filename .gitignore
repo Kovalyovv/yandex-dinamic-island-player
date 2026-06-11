@@ -1,0 +1,5 @@
+.DS_Store
+.build/
+YandexMusicIsland.app
+*.xcodeproj
+xcuserdata/
