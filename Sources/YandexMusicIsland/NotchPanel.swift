@@ -79,6 +79,20 @@ class NotchPanel: NSPanel {
 
     override func mouseDown(with event: NSEvent) {
         if let cv = contentView as? NotchContentView {
+            // Check if the click landed on an interactive subview
+            let locationInWindow = event.locationInWindow
+            if let hitView = cv.hitTest(cv.convert(locationInWindow, from: nil)) {
+                if hitView is NSButton || hitView is InteractiveArtworkView || hitView is GradientProgressBar {
+                    return
+                }
+                var parent = hitView.superview
+                while parent != nil {
+                    if parent is InteractiveArtworkView || parent is GradientProgressBar {
+                        return
+                    }
+                    parent = parent?.superview
+                }
+            }
             if cv.isExpanded {
                 collapseAnimated()
                 cv.setExpanded(false, animated: true)

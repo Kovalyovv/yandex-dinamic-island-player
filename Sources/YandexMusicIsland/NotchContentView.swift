@@ -463,6 +463,7 @@ class NotchContentView: NSView {
         return UserDefaults.standard.value(forKey: "ExpandOnHover") as? Bool ?? true
     }
 
+
     override func mouseEntered(with event: NSEvent) {
         if !expandOnHover { return }
         collapseTimer?.invalidate()
@@ -661,7 +662,13 @@ class EqualizerBarsView: NSView {
 // MARK: - Interactive Artwork View
 class InteractiveArtworkView: NSView {
     private let imageView = NSImageView()
-    private let overlayLayer = CALayer()
+    private let overlayView: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.65).cgColor
+        v.alphaValue = 0
+        return v
+    }()
     private let iconView = NSImageView()
     private let label = NSTextField(labelWithString: "Открыть")
     
@@ -690,19 +697,18 @@ class InteractiveArtworkView: NSView {
         imageView.imageScaling = .scaleProportionallyUpOrDown
         addSubview(imageView)
         
-        overlayLayer.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
-        overlayLayer.opacity = 0
-        layer?.addSublayer(overlayLayer)
+        // Dark overlay — NSView so it renders above imageView
+        addSubview(overlayView)
         
         if let icon = NSImage(systemSymbolName: "arrow.up.forward.app", accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+            let config = NSImage.SymbolConfiguration(pointSize: 20, weight: .medium)
             iconView.image = icon.withSymbolConfiguration(config)
         }
         iconView.contentTintColor = .white
         iconView.alphaValue = 0
         addSubview(iconView)
         
-        label.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        label.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         label.textColor = .white
         label.alignment = .center
         label.isEditable = false
@@ -716,31 +722,42 @@ class InteractiveArtworkView: NSView {
     override func layout() {
         super.layout()
         imageView.frame = bounds
-        overlayLayer.frame = bounds
+        overlayView.frame = bounds
         
-        iconView.frame = NSRect(x: (bounds.width - 24) / 2, y: (bounds.height / 2), width: 24, height: 24)
-        label.frame = NSRect(x: 0, y: (bounds.height / 2) - 20, width: bounds.width, height: 16)
+        let iconSize: CGFloat = 24
+        iconView.frame = NSRect(x: (bounds.width - iconSize) / 2, y: (bounds.height / 2) + 2, width: iconSize, height: iconSize)
+        label.frame = NSRect(x: 0, y: (bounds.height / 2) - 16, width: bounds.width, height: 14)
     }
     
     override func mouseEntered(with event: NSEvent) {
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-            overlayLayer.opacity = 1
-            iconView.animator().alphaValue = 1
-            label.animator().alphaValue = 1
+            ctx.duration = 0.15
+            self.overlayView.animator().alphaValue = 1
+            self.iconView.animator().alphaValue = 1
+            self.label.animator().alphaValue = 1
         }
     }
     
     override func mouseExited(with event: NSEvent) {
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-            overlayLayer.opacity = 0
-            iconView.animator().alphaValue = 0
-            label.animator().alphaValue = 0
+            ctx.duration = 0.15
+            self.overlayView.animator().alphaValue = 0
+            self.iconView.animator().alphaValue = 0
+            self.label.animator().alphaValue = 0
         }
     }
     
     override func mouseDown(with event: NSEvent) {
+        // Visual feedback
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.08
+            self.overlayView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.8).cgColor
+        }, completionHandler: {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.08
+                self.overlayView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.65).cgColor
+            }
+        })
         onClick?()
     }
     
