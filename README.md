@@ -10,6 +10,12 @@ A sleek, modern macOS menu bar widget for controlling Yandex Music. Designed to 
 *   **Track Marquee**: Smoothly scrolling track title and artist name in the compact view.
 *   **No Interference**: Perfectly transparent areas allow you to click system icons beneath the widget without any issues.
 
+## Screenshots 📸
+
+| Compact Mode | Expanded Mode |
+|:---:|:---:|
+| <img src="assets/compact.png" width="400"/> | <img src="assets/expanded.png" width="400"/> |
+
 ## Installation 🚀
 
 You can download the pre-compiled `.dmg` file from the **Releases** page on GitHub.
