@@ -18,6 +18,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        // Request accessibility permissions so AXFullScreen detection works
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        let trusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
+        NSLog("[YMIsland] Accessibility trusted: \(trusted)")
+
+        // Setup desktop tracker for permission-less fullscreen detection
+        setupDesktopTracker()
+
         // Setup status bar item for toggling
         setupStatusItem()
 
@@ -54,7 +62,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self = self else { return }
                 
                 // Ensure it's visible if we hid it internally before (legacy support)
-                if !self.panel.isVisible && !self.isUserHidden {
+                // BUT don't re-show if hidden for fullscreen mode
+                if !self.panel.isVisible && !self.isUserHidden && !self.isHiddenForFullscreen {
                     self.panel.makeKeyAndOrderFront(nil)
                 }
                 
@@ -89,10 +98,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Fullscreen Detection
 
     private func setupFullscreenDetection() {
-        // Check fullscreen state every second
-        fullscreenCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // Check fullscreen state frequently
+        fullscreenCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.checkFullscreenState()
         }
+
+        // Immediately react to space changes (entering/leaving fullscreen spaces)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(spaceDidChange),
+            name: NSWorkspace.activeSpaceDidChangeNotification, object: nil
+        )
+
+        // KVO on presentationOptions — fires when system UI mode changes
+        // (value 4 = fullscreen mode via setPresentationOptions)
+        NSApp.addObserver(self, forKeyPath: "currentSystemPresentationOptions",
+                          options: .new, context: nil)
 
         // Monitor mouse movement globally to detect when cursor is near the top
         mouseMoveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
@@ -106,8 +126,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                               change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        if keyPath == "currentSystemPresentationOptions" {
+            DispatchQueue.main.async { [weak self] in
+                self?.checkFullscreenState()
+            }
+        }
+    }
+
+    @objc private func spaceDidChange() {
+        // Small delay to let the system update its state
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.checkFullscreenState()
+        }
+    }
+
     private func checkFullscreenState() {
-        let hideInFullscreen = UserDefaults.standard.value(forKey: "HideInFullscreen") as? Bool ?? false
+        let hideInFullscreen = UserDefaults.standard.value(forKey: "HideInFullscreen") as? Bool ?? true
         guard hideInFullscreen else {
             if isHiddenForFullscreen {
                 isHiddenForFullscreen = false
@@ -129,32 +165,111 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private var debugLogCounter = 0
+    private var desktopTrackerWindow: NSWindow!
+    
+    private func setupDesktopTracker() {
+        let rect = NSRect(x: 0, y: 0, width: 1, height: 1)
+        desktopTrackerWindow = NSWindow(contentRect: rect, styleMask: .borderless, backing: .buffered, defer: false)
+        desktopTrackerWindow.alphaValue = 0.0
+        desktopTrackerWindow.isOpaque = false
+        desktopTrackerWindow.ignoresMouseEvents = true
+        // Crucial: Moves to all normal desktop spaces, but CANNOT join fullscreen spaces
+        desktopTrackerWindow.collectionBehavior = [.moveToActiveSpace]
+        desktopTrackerWindow.orderBack(nil)
+    }
+
     private func detectFullscreen() -> Bool {
-        guard let screen = NSScreen.main else { return false }
-        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return false }
-
-        let myPID = ProcessInfo.processInfo.processIdentifier
-
-        for window in windowList {
-            guard let boundsDict = window[kCGWindowBounds as String] as? [String: Any],
-                  let layer = window[kCGWindowLayer as String] as? Int,
-                  let ownerPID = window[kCGWindowOwnerPID as String] as? Int32 else { continue }
-
-            // Skip our own windows and non-standard layers
-            if ownerPID == myPID || layer != 0 { continue }
-
-            let width = boundsDict["Width"] as? CGFloat ?? 0
-            let height = boundsDict["Height"] as? CGFloat ?? 0
-
-            if width >= screen.frame.width && height >= screen.frame.height {
-                return true
+        var reasons: [String] = []
+        
+        // 1. Tracker Window Check (100% permission-free)
+        // If the tracker window is NOT on the active space, it means the active space is a Fullscreen space.
+        if !desktopTrackerWindow.isOnActiveSpace {
+            reasons.append("TrackerWindowNotOnSpace")
+        }
+        
+        // 2. Check WindowList for any window covering the panel's screen (fixes 'fake' fullscreen and some multi-monitor cases)
+        if let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID),
+           let panelScreen = panel?.screen ?? NSScreen.main {
+            let screenFrame = panelScreen.frame
+            
+            for window in windows as NSArray {
+                guard let winInfo = window as? NSDictionary else { continue }
+                let ownerName = winInfo["kCGWindowOwnerName"] as? String ?? ""
+                
+                // Ignore background system processes and ourselves
+                if ownerName == "Dock" || ownerName == "Window Server" || ownerName == "YandexMusicIsland" {
+                    continue
+                }
+                
+                // Ignore background layers (like Desktop wallpaper owned by Finder/Wallpaper)
+                let layer = winInfo["kCGWindowLayer"] as? Int ?? 0
+                if layer < 0 {
+                    continue
+                }
+                
+                if let boundsDict = winInfo["kCGWindowBounds"] as? NSDictionary,
+                   let bounds = CGRect(dictionaryRepresentation: boundsDict) {
+                    
+                    // If a user window covers the entire screen, it's a fullscreen app
+                    if bounds.width >= screenFrame.width - 1 && bounds.height >= screenFrame.height - 1 {
+                        // Also check if it's on the same screen (by intersection)
+                        if bounds.intersects(screenFrame) {
+                            reasons.append("WindowCoversScreen(\(ownerName))")
+                            break
+                        }
+                    }
+                }
             }
         }
-        return false
+        
+        // 3. Accessibility API (Primary, if permissions are granted)
+        if let frontApp = NSWorkspace.shared.frontmostApplication {
+            let pid = frontApp.processIdentifier
+            let appElement = AXUIElementCreateApplication(pid)
+            
+            var focusedWindow: AnyObject?
+            let result = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
+            
+            if result == .success, let window = focusedWindow {
+                let axWindow = window as! AXUIElement
+                
+                var fullscreenValue: AnyObject?
+                let fsResult = AXUIElementCopyAttributeValue(axWindow, "AXFullScreen" as CFString, &fullscreenValue)
+                
+                if fsResult == .success, let isFS = fullscreenValue as? Bool, isFS {
+                    reasons.append("AXFullScreen")
+                }
+            }
+        }
+        
+        // If ANY method detects fullscreen, we trust it.
+        let result = !reasons.isEmpty
+        
+        // Write debug log to file every ~2 seconds
+        debugLogCounter += 1
+        if debugLogCounter % 4 == 0 {
+            let ts = ISO8601DateFormatter().string(from: Date())
+            let frontAppName = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+            let line = "\(ts) | fullscreen=\(result) | reasons=\(reasons) | frontApp=\(frontAppName) | hidden=\(isHiddenForFullscreen)\n"
+            if let data = line.data(using: .utf8) {
+                if FileManager.default.fileExists(atPath: "/tmp/ymisland_debug.log") {
+                    if let fh = FileHandle(forWritingAtPath: "/tmp/ymisland_debug.log") {
+                        fh.seekToEndOfFile()
+                        fh.write(data)
+                        fh.closeFile()
+                    }
+                } else {
+                    FileManager.default.createFile(atPath: "/tmp/ymisland_debug.log", contents: data)
+                }
+            }
+        }
+        
+        return result
     }
 
     private func handleMouseMoveForFullscreen() {
-        let hideInFullscreen = UserDefaults.standard.value(forKey: "HideInFullscreen") as? Bool ?? false
+        let hideInFullscreen = UserDefaults.standard.value(forKey: "HideInFullscreen") as? Bool ?? true
         guard hideInFullscreen, isCurrentlyFullscreen else { return }
 
         guard let screen = NSScreen.main else { return }
@@ -165,25 +280,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let isNearTop = mouseLocation.y >= (screen.frame.maxY - menuBarThreshold)
 
         if isNearTop && isHiddenForFullscreen {
-            showPanelForFullscreen()
+            showPanelForFullscreen(forcedCollapse: true)
         } else if !isNearTop && !isHiddenForFullscreen && isCurrentlyFullscreen {
             hidePanelForFullscreen()
         }
     }
 
     private func hidePanelForFullscreen() {
+        NSLog("[YMIsland] Hiding panel for fullscreen")
         isHiddenForFullscreen = true
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.25
-            self.panel.animator().alphaValue = 0.0
+        panel.ignoresMouseEvents = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            panel.animator().alphaValue = 0.0
         }
     }
 
-    private func showPanelForFullscreen() {
+    private func showPanelForFullscreen(forcedCollapse: Bool = false) {
+        NSLog("[YMIsland] Showing panel from fullscreen")
         isHiddenForFullscreen = false
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-            self.panel.animator().alphaValue = 1.0
+        panel.ignoresMouseEvents = false
+        
+        if forcedCollapse {
+            panel.collapseAnimated()
+            contentView.setExpanded(false, animated: false)
+        }
+        
+        // Ensure it's in the correct position if resolution changed
+        panel.repositionAtNotch()
+        
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            panel.animator().alphaValue = 1.0
         }
     }
 
@@ -206,7 +334,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(expandOnHoverMenuItem)
 
         hideInFullscreenMenuItem = NSMenuItem(title: "Скрывать в полноэкранном режиме", action: #selector(toggleHideInFullscreen), keyEquivalent: "")
-        let isHideFS = UserDefaults.standard.value(forKey: "HideInFullscreen") as? Bool ?? false
+        let isHideFS = UserDefaults.standard.value(forKey: "HideInFullscreen") as? Bool ?? true
         hideInFullscreenMenuItem.state = isHideFS ? .on : .off
         menu.addItem(hideInFullscreenMenuItem)
         
@@ -240,7 +368,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleHideInFullscreen() {
-        let currentState = UserDefaults.standard.value(forKey: "HideInFullscreen") as? Bool ?? false
+        let currentState = UserDefaults.standard.value(forKey: "HideInFullscreen") as? Bool ?? true
         let newState = !currentState
         UserDefaults.standard.set(newState, forKey: "HideInFullscreen")
         hideInFullscreenMenuItem.state = newState ? .on : .off
