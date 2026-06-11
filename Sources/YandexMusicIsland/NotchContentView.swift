@@ -6,7 +6,10 @@ class NotchContentView: NSView {
 
     // MARK: - Geometry info
     var menuBarHeight: CGFloat = 37
-    var compactPillWidth: CGFloat = 300
+    var compactPillWidth: CGFloat {
+        let saved = UserDefaults.standard.double(forKey: "CompactPillWidth")
+        return saved > 0 ? CGFloat(saved) : 300
+    }
     var notchWidth: CGFloat = 240
     var expandedPlayerWidth: CGFloat = 500
 
@@ -179,8 +182,10 @@ class NotchContentView: NSView {
         layer?.masksToBounds = false
 
         addSubview(bgView)
-        addSubview(compactContainer)
-        addSubview(expandedContainer)
+        bgView.addSubview(compactContainer)
+        bgView.addSubview(expandedContainer)
+        
+        bgView.layer?.masksToBounds = true
 
         // Add compact elements
         compactContainer.addSubview(compactArtwork)
@@ -196,6 +201,19 @@ class NotchContentView: NSView {
         expandedContainer.addSubview(expandedProgress)
         expandedContainer.addSubview(expandedElapsed)
         expandedContainer.addSubview(expandedDuration)
+
+        expandedProgress.onSeek = { [weak self] percentage in
+            guard let self = self, let state = self.currentState, state.duration > 0 else { return }
+            let targetSeconds = state.duration * percentage
+            
+            // Optimistic instant update
+            state.elapsedTime = targetSeconds
+            state.timestamp = Date().timeIntervalSince1970
+            self.updateProgress(state)
+            
+            self.mediaBridge?.sendCommand("seek", String(targetSeconds))
+        }
+
         expandedContainer.addSubview(expandedPrev)
         expandedContainer.addSubview(expandedPlayPause)
         expandedContainer.addSubview(expandedNext)
@@ -247,14 +265,33 @@ class NotchContentView: NSView {
         let targetBgRect = isExpanded ? expandedRect : compactRect
         let targetRadius: CGFloat = isExpanded ? 24 : 18
 
+        currentTargetBgRect = targetBgRect
+        updateHoverTrackingArea(rect: targetBgRect)
+
+        let compactLocalRect = NSRect(
+            x: compactRect.minX - targetBgRect.minX,
+            y: compactRect.minY - targetBgRect.minY,
+            width: compactRect.width,
+            height: compactRect.height
+        )
+        let expandedLocalRect = NSRect(
+            x: expandedRect.minX - targetBgRect.minX,
+            y: expandedRect.minY - targetBgRect.minY,
+            width: expandedRect.width,
+            height: expandedRect.height
+        )
+
         if animated {
             NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.4
+                context.duration = 0.25
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 context.allowsImplicitAnimation = true
                 
                 self.bgView.animator().frame = targetBgRect
                 self.bgView.layer?.cornerRadius = targetRadius
+                
+                self.compactContainer.animator().frame = compactLocalRect
+                self.expandedContainer.animator().frame = expandedLocalRect
                 
                 self.compactContainer.animator().alphaValue = self.isExpanded ? 0 : 1
                 self.expandedContainer.animator().alphaValue = self.isExpanded ? 1 : 0
@@ -262,12 +299,13 @@ class NotchContentView: NSView {
         } else {
             bgView.frame = targetBgRect
             bgView.layer?.cornerRadius = targetRadius
+            
+            compactContainer.frame = compactLocalRect
+            expandedContainer.frame = expandedLocalRect
+            
             compactContainer.alphaValue = isExpanded ? 0 : 1
             expandedContainer.alphaValue = isExpanded ? 1 : 0
         }
-        
-        compactContainer.frame = compactRect
-        expandedContainer.frame = expandedRect
     }
 
     private func layoutCompactContainer(_ bounds: NSRect) {
@@ -309,7 +347,7 @@ class NotchContentView: NSView {
 
         let progressY = topY - 60
         let progressW: CGFloat = 160
-        expandedProgress.frame = NSRect(x: centerX - progressW/2, y: progressY, width: progressW, height: 4)
+        expandedProgress.frame = NSRect(x: centerX - progressW/2, y: progressY - 8, width: progressW, height: 20)
 
         let timeW: CGFloat = 40
         expandedElapsed.frame = NSRect(x: centerX - progressW/2 - timeW - 8, y: progressY - 5, width: timeW, height: 14)
@@ -330,6 +368,53 @@ class NotchContentView: NSView {
         guard isExpanded != expanded else { return }
         isExpanded = expanded
         performLayout(animated: animated)
+    }
+
+    func setCompactWidth(_ w: CGFloat) {
+        UserDefaults.standard.set(Double(w), forKey: "CompactPillWidth")
+        performLayout(animated: true)
+    }
+
+    // MARK: - Hover Tracking
+
+    private var hoverTrackingArea: NSTrackingArea?
+    private var currentTargetBgRect: NSRect = .zero
+
+    private func updateHoverTrackingArea(rect: NSRect) {
+        if let ta = hoverTrackingArea {
+            removeTrackingArea(ta)
+        }
+        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways]
+        let ta = NSTrackingArea(rect: rect, options: options, owner: self, userInfo: nil)
+        addTrackingArea(ta)
+        hoverTrackingArea = ta
+    }
+
+    var expandOnHover: Bool {
+        return UserDefaults.standard.value(forKey: "ExpandOnHover") as? Bool ?? true
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if !expandOnHover { return }
+        if !isExpanded {
+            if let window = self.window as? NotchPanel {
+                window.expandAnimated()
+            }
+            setExpanded(true, animated: true)
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if !expandOnHover { return }
+        let localPoint = convert(event.locationInWindow, from: nil)
+        if currentTargetBgRect.contains(localPoint) { return }
+
+        if isExpanded {
+            if let window = self.window as? NotchPanel {
+                window.collapseAnimated()
+            }
+            setExpanded(false, animated: true)
+        }
     }
 
     func update(with state: NowPlayingState) {
@@ -405,19 +490,42 @@ class NotchContentView: NSView {
 // MARK: - Gradient Progress Bar
 class GradientProgressBar: NSView {
     var progress: CGFloat = 0 { didSet { needsDisplay = true } }
+    var onSeek: ((Double) -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        let localPoint = convert(event.locationInWindow, from: nil)
+        let percentage = Double(localPoint.x / bounds.width)
+        onSeek?(max(0, min(1, percentage)))
+    }
     override init(frame: NSRect) { super.init(frame: frame) ; wantsLayer = true }
     required init?(coder: NSCoder) { super.init(coder: coder) ; wantsLayer = true }
     override func draw(_ dirtyRect: NSRect) {
-        let bounds = self.bounds
-        let trackPath = NSBezierPath(roundedRect: bounds, xRadius: 2, yRadius: 2)
-        NSColor.white.withAlphaComponent(0.2).setFill()
-        trackPath.fill()
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+
+        let barH: CGFloat = 4
+        let barY = (bounds.height - barH) / 2
+        let barRect = NSRect(x: 0, y: barY, width: bounds.width, height: barH)
+
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.2).cgColor)
+        let bgPath = NSBezierPath(roundedRect: barRect, xRadius: barH / 2, yRadius: barH / 2)
+        bgPath.fill()
+
         guard progress > 0 else { return }
         let fillW = bounds.width * min(progress, 1.0)
-        let fillRect = NSRect(x: 0, y: 0, width: fillW, height: bounds.height)
-        let fillPath = NSBezierPath(roundedRect: fillRect, xRadius: 2, yRadius: 2)
-        NSColor.white.setFill()
+        let fillRect = NSRect(x: 0, y: barY, width: fillW, height: barH)
+        let fillPath = NSBezierPath(roundedRect: fillRect, xRadius: barH / 2, yRadius: barH / 2)
+        ctx.setFillColor(NSColor(white: 1.0, alpha: 0.8).cgColor)
         fillPath.fill()
+
+        // Draw thumb (бегунок)
+        let thumbDiameter: CGFloat = 10
+        let thumbRadius = thumbDiameter / 2
+        let thumbX = min(max(0, fillW - thumbRadius), bounds.width - thumbDiameter)
+        let thumbRect = NSRect(x: thumbX, y: (bounds.height - thumbDiameter) / 2, width: thumbDiameter, height: thumbDiameter)
+        
+        ctx.setFillColor(NSColor.white.cgColor)
+        let thumbPath = NSBezierPath(ovalIn: thumbRect)
+        thumbPath.fill()
     }
 }
 

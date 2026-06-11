@@ -69,6 +69,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem!
 
+    private var expandOnHoverMenuItem: NSMenuItem!
+
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
@@ -76,11 +78,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Увеличить ширину (+)", action: #selector(increaseWidth), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Уменьшить ширину (-)", action: #selector(decreaseWidth), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        
+        expandOnHoverMenuItem = NSMenuItem(title: "Раскрывать по наведению", action: #selector(toggleExpandOnHover), keyEquivalent: "")
+        let isHover = UserDefaults.standard.value(forKey: "ExpandOnHover") as? Bool ?? true
+        expandOnHoverMenuItem.state = isHover ? .on : .off
+        menu.addItem(expandOnHoverMenuItem)
+        
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Показать/Скрыть", action: #selector(toggleVisibility), keyEquivalent: "h"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Выход", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         statusItem.menu = menu
+    }
+
+    @objc private func toggleExpandOnHover() {
+        let currentState = UserDefaults.standard.value(forKey: "ExpandOnHover") as? Bool ?? true
+        let newState = !currentState
+        UserDefaults.standard.set(newState, forKey: "ExpandOnHover")
+        expandOnHoverMenuItem.state = newState ? .on : .off
+    }
+
+    @objc private func increaseWidth() {
+        let newWidth = min(contentView.compactPillWidth + 20, 800)
+        contentView.setCompactWidth(newWidth)
+    }
+
+    @objc private func decreaseWidth() {
+        let newWidth = max(contentView.compactPillWidth - 20, 100)
+        contentView.setCompactWidth(newWidth)
     }
 
     @objc private func toggleVisibility() {

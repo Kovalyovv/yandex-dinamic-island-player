@@ -129,13 +129,13 @@ class MediaControlBridge {
         }
     }
 
-    /// Send a media command (play, pause, next, previous, etc.)
-    func sendCommand(_ command: String) {
+    /// Send a media command (play, pause, next, previous, seek, etc.)
+    func sendCommand(_ args: String...) {
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self = self else { return }
             let task = Process()
             task.executableURL = URL(fileURLWithPath: self.mediaControlPath)
-            task.arguments = [command]
+            task.arguments = args
             task.standardOutput = FileHandle.nullDevice
             task.standardError = FileHandle.nullDevice
             try? task.run()
