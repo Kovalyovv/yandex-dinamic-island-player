@@ -246,10 +246,7 @@ class NotchContentView: NSView {
         performLayout(animated: false)
     }
 
-    override func layout() {
-        super.layout()
-        performLayout(animated: false)
-    }
+
 
     // MARK: - Layout Logic
 
