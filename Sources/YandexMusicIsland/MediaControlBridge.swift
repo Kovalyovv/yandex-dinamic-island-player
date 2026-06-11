@@ -111,6 +111,12 @@ class MediaControlBridge {
                 else { continue }
 
                 let payload = (dict["payload"] as? [String: Any]) ?? dict
+                
+                // Completely ignore payloads from live streams (e.g. Twitch)
+                if !self.state.isValidPayload(payload) {
+                    continue
+                }
+                
                 self.state.update(from: payload)
                 
                 DispatchQueue.main.async { [weak self] in

@@ -15,10 +15,14 @@ class NowPlayingState {
 
     var ignorePositionUpdatesUntil: Date?
 
-    /// Filter out invalid or unwanted media like live streams (Twitch)
-    var isValidMedia: Bool {
-        if title.isEmpty && artist.isEmpty { return false }
-        if duration <= 0 { return false }
+    /// Check if the incoming payload represents a valid music stream (not a live stream/Twitch)
+    func isValidPayload(_ dict: [String: Any]) -> Bool {
+        let incomingTitle = dict["title"] as? String ?? self.title
+        let incomingArtist = dict["artist"] as? String ?? self.artist
+        let incomingDuration = dict["duration"] as? Double ?? self.duration
+        
+        if incomingTitle.isEmpty && incomingArtist.isEmpty { return false }
+        if incomingDuration <= 0 { return false }
         return true
     }
 
