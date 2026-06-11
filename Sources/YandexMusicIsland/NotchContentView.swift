@@ -288,9 +288,6 @@ class NotchContentView: NSView {
         let maskRect = NSRect(origin: .zero, size: targetBgRect.size)
 
         compactMarquee.isRunning = false
-        if isExpanded {
-            compactMarquee.isHidden = true
-        }
 
         if animated {
             NSAnimationContext.runAnimationGroup({ context in
@@ -306,14 +303,17 @@ class NotchContentView: NSView {
                 
                 self.compactContainer.animator().frame = compactLocalRect
                 self.expandedContainer.animator().frame = expandedLocalRect
+            }, completionHandler: {
+                self.compactMarquee.isRunning = !self.isExpanded
+            })
+            
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.15
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                context.allowsImplicitAnimation = true
                 
                 self.compactContainer.animator().alphaValue = self.isExpanded ? 0 : 1
                 self.expandedContainer.animator().alphaValue = self.isExpanded ? 1 : 0
-            }, completionHandler: {
-                if !self.isExpanded {
-                    self.compactMarquee.isHidden = false
-                }
-                self.compactMarquee.isRunning = !self.isExpanded
             })
         } else {
             bgView.frame = targetBgRect
@@ -328,9 +328,6 @@ class NotchContentView: NSView {
             compactContainer.alphaValue = isExpanded ? 0 : 1
             expandedContainer.alphaValue = isExpanded ? 1 : 0
             
-            if !isExpanded {
-                compactMarquee.isHidden = false
-            }
             compactMarquee.isRunning = !isExpanded
         }
     }
