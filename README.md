@@ -14,7 +14,7 @@ A sleek, modern macOS menu bar widget for controlling Yandex Music. Designed to 
 
 | Compact Mode | Expanded Mode |
 |:---:|:---:|
-| <img src="assets/compact.png" width="400"/> | <img src="assets/expanded.png" width="400"/> |
+| <img src="assets/compact.jpeg" width="400"/> | <img src="assets/expanded.jpeg" width="400"/> |
 
 ## Installation 🚀
 
