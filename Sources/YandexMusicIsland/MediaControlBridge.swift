@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Bridge to `media-control` CLI tool.
 /// Launches `media-control stream --no-diff` as a subprocess and parses JSON output.
@@ -27,10 +28,48 @@ class MediaControlBridge {
 
     /// Start streaming now playing info
     func start() {
+        // Observe app termination to clear state if no music app is left running
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            if !self.isAnyAllowedMusicAppRunning() {
+                self.clearState()
+            }
+        }
+        
+        // Initial check: if it's not running, clear state immediately
+        if !isAnyAllowedMusicAppRunning() {
+            clearState()
+        }
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.fetchInitialState()
             self?.startStream()
         }
+    }
+    
+    private let allowedMusicApps = [
+        "ru.yandex.desktop.music",
+        "com.spotify.client",
+        "com.apple.Music",
+        "com.soundcloud.desktop"
+    ]
+
+    private func isAnyAllowedMusicAppRunning() -> Bool {
+        return NSWorkspace.shared.runningApplications.contains { app in
+            guard let bundleID = app.bundleIdentifier else { return false }
+            return allowedMusicApps.contains(bundleID)
+        }
+    }
+    
+    private func clearState() {
+        state.title = ""
+        state.artist = ""
+        state.album = ""
+        state.artworkData = nil
+        state.isPlaying = false
+        state.duration = 0
+        state.elapsedTime = 0
+        onUpdate?(state)
     }
 
     private func fetchInitialState() {
@@ -49,6 +88,7 @@ class MediaControlBridge {
             let data = outPipe.fileHandleForReading.readDataToEndOfFile()
             if let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let payload = (dict["payload"] as? [String: Any]) ?? dict
+                guard self.isAnyAllowedMusicAppRunning() else { return }
                 if self.state.isValidPayload(payload) {
                     self.state.update(from: payload)
                     DispatchQueue.main.async { [weak self] in
@@ -113,6 +153,7 @@ class MediaControlBridge {
                 else { continue }
 
                 let payload = (dict["payload"] as? [String: Any]) ?? dict
+                guard self.isAnyAllowedMusicAppRunning() else { continue }
                 
                 // Completely ignore payloads from live streams (e.g. Twitch)
                 if !self.state.isValidPayload(payload) {
@@ -141,6 +182,7 @@ class MediaControlBridge {
     func sendCommand(_ args: String...) {
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self = self else { return }
+            guard self.isAnyAllowedMusicAppRunning() else { return }
             let task = Process()
             task.executableURL = URL(fileURLWithPath: self.mediaControlPath)
             task.arguments = args

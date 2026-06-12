@@ -60,14 +60,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mediaBridge.onUpdate = { [weak self] state in
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                self.contentView.update(with: state)
                 
-                // Ensure it's visible if we hid it internally before (legacy support)
-                // BUT don't re-show if hidden for fullscreen mode
-                if !self.panel.isVisible && !self.isUserHidden && !self.isHiddenForFullscreen {
+                // Always keep the panel in the window list so it can be hovered.
+                if !self.panel.isVisible {
                     self.panel.makeKeyAndOrderFront(nil)
                 }
-                
-                self.contentView.update(with: state)
             }
         }
         
@@ -197,8 +195,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let winInfo = window as? NSDictionary else { continue }
                 let ownerName = winInfo["kCGWindowOwnerName"] as? String ?? ""
                 
-                // Ignore background system processes and ourselves
-                if ownerName == "Dock" || ownerName == "Window Server" || ownerName == "YandexMusicIsland" {
+                // Ignore background system processes, Notification Center, and ourselves
+                if ownerName == "Dock" || ownerName == "Window Server" || ownerName == "YandexMusicIsland" || 
+                   ownerName.contains("Notification Center") || ownerName.contains("Центр уведомлени") || ownerName == "Control Center" || ownerName == "Пункт управления" {
                     continue
                 }
                 
@@ -278,10 +277,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Menu bar area: top ~36px of the screen (includes notch area)
         let menuBarThreshold: CGFloat = 36
         let isNearTop = mouseLocation.y >= (screen.frame.maxY - menuBarThreshold)
+        
+        // Also check if mouse is inside the panel's current frame
+        let isInsidePanel = panel.frame.contains(mouseLocation)
 
         if isNearTop && isHiddenForFullscreen {
             showPanelForFullscreen(forcedCollapse: true)
-        } else if !isNearTop && !isHiddenForFullscreen && isCurrentlyFullscreen {
+        } else if !isNearTop && !isInsidePanel && !isHiddenForFullscreen && isCurrentlyFullscreen {
             hidePanelForFullscreen()
         }
     }
@@ -297,6 +299,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showPanelForFullscreen(forcedCollapse: Bool = false) {
+        guard !isUserHidden else { return }
         NSLog("[YMIsland] Showing panel from fullscreen")
         isHiddenForFullscreen = false
         panel.ignoresMouseEvents = false
@@ -393,12 +396,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isUserHidden: Bool = false
 
     @objc private func toggleVisibility() {
-        if panel.isVisible {
+        if !isUserHidden {
+            // Hide
             isUserHidden = true
-            panel.orderOut(nil)
+            panel.ignoresMouseEvents = true
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.3
+                panel.animator().alphaValue = 0.0
+            }
         } else {
+            // Unhide
             isUserHidden = false
-            panel.makeKeyAndOrderFront(nil)
+            if !isHiddenForFullscreen {
+                panel.ignoresMouseEvents = false
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.3
+                    panel.animator().alphaValue = 1.0
+                }
+            }
         }
     }
 

@@ -7,6 +7,9 @@ class NotchContentView: NSView {
     // MARK: - Geometry info
     var menuBarHeight: CGFloat = 37
     var compactPillWidth: CGFloat {
+        if currentState?.hasTrack == false {
+            return 50 // just for a small music icon
+        }
         let saved = UserDefaults.standard.double(forKey: "CompactPillWidth")
         return saved > 0 ? CGFloat(saved) : 300
     }
@@ -164,6 +167,37 @@ class NotchContentView: NSView {
         return EqualizerBarsView(frame: .zero)
     }()
 
+    // MARK: - Placeholder UI
+    private let placeholderContainer: NSView = {
+        let v = NSView()
+        v.isHidden = true
+        return v
+    }()
+
+    private let placeholderTitle: NSTextField = {
+        let l = NSTextField(labelWithString: "Ничего не играет")
+        l.font = NSFont.systemFont(ofSize: 18, weight: .bold)
+        l.textColor = .white
+        l.alignment = .center
+        return l
+    }()
+
+    private let placeholderSubtitle: NSTextField = {
+        let l = NSTextField(labelWithString: "Включите музыку в одном из приложений:")
+        l.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        l.textColor = NSColor(white: 1.0, alpha: 0.6)
+        l.alignment = .center
+        return l
+    }()
+
+    private let launcherStack: NSStackView = {
+        let s = NSStackView()
+        s.orientation = .horizontal
+        s.spacing = 24
+        s.alignment = .centerY
+        return s
+    }()
+
     // MARK: - State
     private(set) var isExpanded: Bool = false
     private var mediaBridge: MediaControlBridge?
@@ -268,6 +302,14 @@ class NotchContentView: NSView {
         expandedContainer.addSubview(expandedNext)
         expandedContainer.addSubview(expandedEq)
 
+        // Add placeholder
+        expandedContainer.addSubview(placeholderContainer)
+        placeholderContainer.addSubview(placeholderTitle)
+        placeholderContainer.addSubview(placeholderSubtitle)
+        placeholderContainer.addSubview(launcherStack)
+        
+        setupLaunchers()
+
         // Actions
         compactNextBtn.target = self
         compactNextBtn.action = #selector(nextTrack)
@@ -288,7 +330,58 @@ class NotchContentView: NSView {
         performLayout(animated: false)
     }
 
+    private func setupLaunchers() {
+        let apps = [
+            ("ru.yandex.desktop.music", "Yandex Music"),
+            ("com.spotify.client", "Spotify"),
+            ("com.apple.Music", "Apple Music")
+        ]
+        
+        for app in apps {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.0) {
+                let icon = NSWorkspace.shared.icon(forFile: url.path)
+                let btn = NSButton(image: icon, target: self, action: #selector(launcherClicked(_:)))
+                btn.isBordered = false
+                btn.bezelStyle = .regularSquare
+                btn.imageScaling = .scaleProportionallyUpOrDown
+                btn.toolTip = app.1
+                btn.identifier = NSUserInterfaceItemIdentifier(app.0)
+                btn.translatesAutoresizingMaskIntoConstraints = false
+                btn.widthAnchor.constraint(equalToConstant: 40).isActive = true
+                btn.heightAnchor.constraint(equalToConstant: 40).isActive = true
+                launcherStack.addView(btn, in: .center)
+            }
+        }
+        
+        // Add SoundCloud as a web link
+        if let scIcon = NSImage(systemSymbolName: "globe", accessibilityDescription: "SoundCloud")?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 24, weight: .regular)) {
+            let scBtn = NSButton(image: scIcon, target: self, action: #selector(launcherClicked(_:)))
+            scBtn.isBordered = false
+            scBtn.bezelStyle = .regularSquare
+            scBtn.contentTintColor = .white
+            scBtn.toolTip = "SoundCloud"
+            scBtn.identifier = NSUserInterfaceItemIdentifier("soundcloud_web")
+            scBtn.translatesAutoresizingMaskIntoConstraints = false
+            scBtn.widthAnchor.constraint(equalToConstant: 40).isActive = true
+            scBtn.heightAnchor.constraint(equalToConstant: 40).isActive = true
+            launcherStack.addView(scBtn, in: .center)
+        }
+    }
 
+    @objc private func launcherClicked(_ sender: NSButton) {
+        guard let id = sender.identifier?.rawValue else { return }
+        if id == "soundcloud_web" {
+            if let url = URL(string: "https://soundcloud.com") {
+                NSWorkspace.shared.open(url)
+            }
+        } else {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+            }
+        }
+        
+        setExpanded(false)
+    }
 
     // MARK: - Layout Logic
 
@@ -311,8 +404,14 @@ class NotchContentView: NSView {
         let targetBgRect = isExpanded ? expandedRect : compactRect
         let targetRadius: CGFloat = isExpanded ? 24 : 18
 
+        var trackingRect = targetBgRect
+        if !isExpanded, currentState?.hasTrack == true {
+            // Limit hover area to artwork and marquee (exclude timing, EQ, Next Button)
+            trackingRect.size.width = compactMarquee.frame.maxX
+        }
+
         currentTargetBgRect = targetBgRect
-        updateHoverTrackingArea(rect: targetBgRect)
+        updateHoverTrackingArea(rect: trackingRect)
 
         let txCompact = compactRect.minX - targetBgRect.minX
         let tyCompact = compactRect.minY - targetBgRect.minY
@@ -327,6 +426,9 @@ class NotchContentView: NSView {
         // Keep their bounds/frames constant so text doesn't re-layout or snap
         compactContainer.frame = NSRect(origin: .zero, size: compactRect.size)
         expandedContainer.frame = NSRect(origin: .zero, size: expandedRect.size)
+        
+        compactContainer.isHidden = false
+        expandedContainer.isHidden = false
 
         if animated {
             isAnimatingLayout = true
@@ -345,6 +447,8 @@ class NotchContentView: NSView {
                 self.expandedContainer.layer?.transform = CATransform3DMakeTranslation(txExpanded, tyExpanded, 0)
             }, completionHandler: {
                 self.compactMarquee.isRunning = !self.isExpanded
+                self.compactContainer.isHidden = self.isExpanded
+                self.expandedContainer.isHidden = !self.isExpanded
                 self.isAnimatingLayout = false
             })
             
@@ -369,11 +473,30 @@ class NotchContentView: NSView {
             compactContainer.alphaValue = isExpanded ? 0 : 1
             expandedContainer.alphaValue = isExpanded ? 1 : 0
             
+            compactContainer.isHidden = isExpanded
+            expandedContainer.isHidden = !isExpanded
+            
             compactMarquee.isRunning = !isExpanded
         }
     }
 
     private func layoutCompactContainer(_ bounds: NSRect) {
+        if currentState?.hasTrack == false {
+            compactEq.isHidden = true
+            compactTiming.isHidden = true
+            compactMarquee.isHidden = true
+            compactNextBtn.isHidden = true
+            
+            let iconSize: CGFloat = 16
+            compactArtwork.frame = NSRect(x: (bounds.width - iconSize) / 2, y: (bounds.height - iconSize) / 2, width: iconSize, height: iconSize)
+            return
+        }
+        
+        compactEq.isHidden = false
+        compactTiming.isHidden = false
+        compactMarquee.isHidden = false
+        compactNextBtn.isHidden = false
+
         let smallArtSize: CGFloat = 24
         compactArtwork.frame = NSRect(x: 12, y: (bounds.height - smallArtSize) / 2, width: smallArtSize, height: smallArtSize)
 
@@ -395,6 +518,39 @@ class NotchContentView: NSView {
     }
 
     private func layoutExpandedContainer(_ bounds: NSRect) {
+        if currentState?.hasTrack == false {
+            expandedArtwork.isHidden = true
+            expandedTitle.isHidden = true
+            expandedArtist.isHidden = true
+            expandedProgress.isHidden = true
+            expandedElapsed.isHidden = true
+            expandedDuration.isHidden = true
+            expandedPlayPause.isHidden = true
+            expandedNext.isHidden = true
+            expandedPrev.isHidden = true
+            expandedEq.isHidden = true
+            
+            placeholderContainer.isHidden = false
+            placeholderContainer.frame = bounds
+            
+            placeholderTitle.frame = NSRect(x: 0, y: bounds.height - 50, width: bounds.width, height: 24)
+            placeholderSubtitle.frame = NSRect(x: 0, y: bounds.height - 75, width: bounds.width, height: 20)
+            launcherStack.frame = NSRect(x: 0, y: bounds.height - 130, width: bounds.width, height: 40)
+            return
+        }
+        
+        expandedArtwork.isHidden = false
+        expandedTitle.isHidden = false
+        expandedArtist.isHidden = false
+        expandedProgress.isHidden = false
+        expandedElapsed.isHidden = false
+        expandedDuration.isHidden = false
+        expandedPlayPause.isHidden = false
+        expandedNext.isHidden = false
+        expandedPrev.isHidden = false
+        expandedEq.isHidden = false
+        placeholderContainer.isHidden = true
+
         let margin: CGFloat = 20
         let artSize: CGFloat = 80
         expandedArtwork.frame = NSRect(x: margin, y: (bounds.height - artSize) / 2, width: artSize, height: artSize)
@@ -496,7 +652,12 @@ class NotchContentView: NSView {
     }
 
     func update(with state: NowPlayingState) {
+        let previousHasTrack = currentState?.hasTrack ?? false
         currentState = state
+
+        if previousHasTrack != state.hasTrack {
+            performLayout(animated: true)
+        }
 
         expandedTitle.stringValue = state.title
         expandedArtist.stringValue = state.artist
@@ -518,7 +679,11 @@ class NotchContentView: NSView {
             compactArtwork.image = img
             expandedArtwork.image = img
         } else {
-            compactArtwork.image = nil
+            if !state.hasTrack {
+                compactArtwork.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)
+            } else {
+                compactArtwork.image = nil
+            }
             expandedArtwork.image = nil
         }
 
@@ -564,6 +729,18 @@ class NotchContentView: NSView {
     deinit {
         progressTimer?.invalidate()
     }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Convert point to local coordinates
+        let localPoint = self.convert(point, from: self.superview)
+        
+        // Only accept clicks if they hit the visible background area.
+        if bgView.frame.contains(localPoint) {
+            return super.hitTest(point)
+        }
+        
+        // Ignore clicks in the transparent regions around the player
+        return nil
+    }
 }
 
 // MARK: - Gradient Progress Bar
@@ -576,7 +753,7 @@ class GradientProgressBar: NSView {
         let percentage = Double(localPoint.x / bounds.width)
         onSeek?(max(0, min(1, percentage)))
     }
-    
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         return true
     }
@@ -714,11 +891,11 @@ class InteractiveArtworkView: NSView {
         label.isEditable = false
         label.isSelectable = false
         label.isBordered = false
-        label.backgroundColor = .clear
+            label.backgroundColor = .clear
         label.alphaValue = 0
         addSubview(label)
     }
-    
+
     override func layout() {
         super.layout()
         imageView.frame = bounds
