@@ -34,6 +34,7 @@ class NotchContentView: NSView {
         v.state = .active
         v.wantsLayer = true
         v.layer?.masksToBounds = true
+        v.autoresizingMask = [.minYMargin, .minXMargin, .maxXMargin]
         return v
     }()
     
