@@ -29,6 +29,16 @@ class NotchContentView: NSView {
         v.layer?.masksToBounds = true
         return v
     }()
+    
+    private let bgTintView: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.clear.cgColor
+        v.autoresizingMask = [.width, .height]
+        return v
+    }()
+    
+    private var lastArtworkData: Data?
 
     // MARK: - Containers
     private let maskContainer: NSView = {
@@ -262,6 +272,8 @@ class NotchContentView: NSView {
         layer?.masksToBounds = false
 
         addSubview(bgView)
+        bgView.addSubview(bgTintView)
+        bgTintView.frame = bgView.bounds
         bgView.addSubview(maskContainer)
         maskContainer.addSubview(compactContainer)
         maskContainer.addSubview(expandedContainer)
@@ -271,6 +283,9 @@ class NotchContentView: NSView {
         compactContainer.addSubview(compactMarquee)
         compactContainer.addSubview(compactTiming)
         compactContainer.addSubview(compactEq)
+        compactEq.onClick = { [weak self] in
+            self?.togglePlayPause()
+        }
         compactContainer.addSubview(compactNextBtn)
 
         // Add expanded elements
@@ -678,6 +693,20 @@ class NotchContentView: NSView {
         if let data = state.artworkData, let img = NSImage(data: data) {
             compactArtwork.image = img
             expandedArtwork.image = img
+            
+            if lastArtworkData != data {
+                lastArtworkData = data
+                DispatchQueue.global(qos: .userInitiated).async {
+                    if let color = img.averageColor() {
+                        DispatchQueue.main.async {
+                            NSAnimationContext.runAnimationGroup { context in
+                                context.duration = 1.0
+                                self.bgTintView.animator().layer?.backgroundColor = color.withAlphaComponent(0.35).cgColor
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             if !state.hasTrack {
                 compactArtwork.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)
@@ -685,6 +714,14 @@ class NotchContentView: NSView {
                 compactArtwork.image = nil
             }
             expandedArtwork.image = nil
+            
+            if lastArtworkData != nil {
+                lastArtworkData = nil
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 1.0
+                    self.bgTintView.animator().layer?.backgroundColor = NSColor.clear.cgColor
+                }
+            }
         }
 
         updateProgress(state)
@@ -798,8 +835,19 @@ class EqualizerBarsView: NSView {
     private let barCount = 4
     private let barSpacing: CGFloat = 3
     private let barWidth: CGFloat = 3
+    var onClick: (() -> Void)?
+    
     override init(frame: NSRect) { super.init(frame: frame) ; wantsLayer = true ; setupBars() }
     required init?(coder: NSCoder) { super.init(coder: coder) ; wantsLayer = true ; setupBars() }
+    
+    override func mouseDown(with event: NSEvent) {
+        if onClick != nil {
+            onClick?()
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+    
     private func setupBars() {
         barLayers.forEach { $0.removeFromSuperlayer() }
         barLayers.removeAll()
