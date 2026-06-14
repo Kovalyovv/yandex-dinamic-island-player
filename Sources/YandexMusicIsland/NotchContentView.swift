@@ -842,6 +842,11 @@ class NotchContentView: NSView {
     }
 
     private func sendTargetedCommand(_ command: String) {
+        if currentState?.isHijacked == true {
+            mediaBridge?.sendCommand(command)
+            return
+        }
+
         let allowedApps = ["ru.yandex.desktop.music", "com.spotify.client", "com.apple.Music"]
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
