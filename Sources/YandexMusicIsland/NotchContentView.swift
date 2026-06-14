@@ -401,9 +401,11 @@ class NotchContentView: NSView {
         let actualMenuBarHeight = screen.flatMap { $0.frame.maxY - $0.visibleFrame.maxY } ?? menuBarHeight
         let actualMBH = actualMenuBarHeight > 10 ? actualMenuBarHeight : menuBarHeight
         
+        let targetBHeight = currentExpandedHeight
+        
         let compactHeight: CGFloat = 37
-        let y2 = b.height
-        let y1 = b.height - actualMBH
+        let y2 = targetBHeight
+        let y1 = targetBHeight - actualMBH
         let topY = y1 + ((y2 - y1) - compactHeight) / 2.0
         
         let pillX = centerX - notchWidth / 2 - compactPillWidth
@@ -411,11 +413,11 @@ class NotchContentView: NSView {
         let playerX = playerMaxX - expandedPlayerWidth
 
         let compactRect = NSRect(x: pillX, y: topY, width: compactPillWidth, height: compactHeight)
-        let expandedRect = NSRect(x: playerX, y: 0, width: expandedPlayerWidth, height: b.height)
+        let expandedRect = NSRect(x: playerX, y: 0, width: expandedPlayerWidth, height: targetBHeight)
 
         // Update fixed layouts inside containers
         layoutCompactContainer(NSRect(x: 0, y: 0, width: compactPillWidth, height: compactHeight))
-        layoutExpandedContainer(NSRect(x: 0, y: 0, width: expandedPlayerWidth, height: b.height))
+        layoutExpandedContainer(NSRect(x: 0, y: 0, width: expandedPlayerWidth, height: targetBHeight))
 
         let targetBgRect = isExpanded ? expandedRect : compactRect
         let targetRadius: CGFloat = isExpanded ? 24 : 12
@@ -685,7 +687,7 @@ class NotchContentView: NSView {
         let previousHijacked = currentState?.isHijacked ?? false
         currentState = state
 
-        if previousHasTrack != state.hasTrack {
+        if previousHasTrack != state.hasTrack || previousHijacked != state.isHijacked {
             performLayout(animated: true)
         }
 

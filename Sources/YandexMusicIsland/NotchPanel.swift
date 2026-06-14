@@ -73,7 +73,7 @@ class NotchPanel: NSPanel {
         let newFrame = NSRect(x: x, y: y, width: w, height: h)
         if self.isVisible && self.alphaValue > 0 && self.frame.height != h {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.2
+                context.duration = 0.25
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 self.animator().setFrame(newFrame, display: true)
             }
