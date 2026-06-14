@@ -760,15 +760,98 @@ class NotchContentView: NSView {
     }
 
     @objc private func togglePlayPause() {
-        mediaBridge?.sendCommand("toggle-play-pause")
+        sendTargetedCommand("toggle-play-pause")
     }
 
     @objc private func prevTrack() {
-        mediaBridge?.sendCommand("previous-track")
+        sendTargetedCommand("previous-track")
     }
 
     @objc private func nextTrack() {
-        mediaBridge?.sendCommand("next-track")
+        sendTargetedCommand("next-track")
+    }
+
+    private func sendTargetedCommand(_ command: String) {
+        let allowedApps = ["ru.yandex.desktop.music", "com.spotify.client", "com.apple.Music"]
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            var activeBundleID = ""
+            var cliPath = "/opt/homebrew/bin/nowplaying-cli"
+            if !FileManager.default.fileExists(atPath: cliPath) {
+                cliPath = "/usr/local/bin/nowplaying-cli"
+            }
+            if FileManager.default.fileExists(atPath: cliPath) {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: cliPath)
+                task.arguments = ["get-raw"]
+                let pipe = Pipe()
+                task.standardOutput = pipe
+                if (try? task.run()) != nil {
+                    task.waitUntilExit()
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let bundle = json["kMRMediaRemoteNowPlayingInfoClientBundleIdentifier"] as? String {
+                        activeBundleID = bundle
+                    }
+                }
+            }
+
+            // If the active audio session is one of our music apps, just send the command globally.
+            if allowedApps.contains(activeBundleID) {
+                self.mediaBridge?.sendCommand(command)
+                return
+            }
+            
+            // Otherwise find the first allowed app that is running
+            let runningApps = NSWorkspace.shared.runningApplications
+            var targetApp: NSRunningApplication? = nil
+            var targetBundleID = ""
+            
+            for app in runningApps {
+                if let bID = app.bundleIdentifier, allowedApps.contains(bID) {
+                    targetApp = app
+                    targetBundleID = bID
+                    break
+                }
+            }
+            
+            guard let appToPause = targetApp else {
+                self.mediaBridge?.sendCommand(command)
+                return
+            }
+
+            if targetBundleID == "com.apple.Music" {
+                let script = command == "toggle-play-pause" ? "playpause" : (command == "next-track" ? "next track" : "previous track")
+                let source = "tell application id \"com.apple.Music\" to \(script)"
+                NSAppleScript(source: source)?.executeAndReturnError(nil)
+                return
+            }
+
+            if targetBundleID == "com.spotify.client" {
+                let script = command == "toggle-play-pause" ? "playpause" : (command == "next-track" ? "next track" : "previous track")
+                let source = "tell application id \"com.spotify.client\" to \(script)"
+                NSAppleScript(source: source)?.executeAndReturnError(nil)
+                return
+            }
+
+            // Yandex Music temporary activation
+            if !appToPause.isActive {
+                DispatchQueue.main.async {
+                    let currentApp = NSWorkspace.shared.frontmostApplication
+                    appToPause.activate(options: [])
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        self.mediaBridge?.sendCommand(command)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            currentApp?.activate(options: [])
+                        }
+                    }
+                }
+            } else {
+                self.mediaBridge?.sendCommand(command)
+            }
+        }
     }
 
     deinit {
