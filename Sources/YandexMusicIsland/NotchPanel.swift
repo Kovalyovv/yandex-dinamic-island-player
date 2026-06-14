@@ -64,7 +64,7 @@ class NotchPanel: NSPanel {
         let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main ?? NSScreen.screens[0]
 
         let w = NotchContentView.expandedWidth
-        let h: CGFloat = 150
+        let h = NotchContentView.expandedHeight
         let x = screen.frame.midX - w / 2.0
         let y = screen.frame.maxY - h
 

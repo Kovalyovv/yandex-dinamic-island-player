@@ -16,8 +16,8 @@ class NotchContentView: NSView {
     var notchWidth: CGFloat = 240
     var expandedPlayerWidth: CGFloat = 440
 
-    static let expandedHeight: CGFloat = 150
     static let expandedWidth: CGFloat = 1400
+    static let expandedHeight: CGFloat = 175
 
     // MARK: - Background
     private let bgView: NSVisualEffectView = {
@@ -180,9 +180,12 @@ class NotchContentView: NSView {
     private let returnButton: NSButton = {
         let b = NSButton(title: "Вернуться в Яндекс Музыку", target: nil, action: #selector(returnToMusicApp))
         b.isBordered = false
-        b.bezelStyle = .inline
+        b.wantsLayer = true
+        b.layer?.backgroundColor = NSColor(white: 1.0, alpha: 0.1).cgColor
+        b.layer?.cornerRadius = 12
+        
         if #available(macOS 14.0, *) {
-            b.contentTintColor = NSColor.systemBlue.withAlphaComponent(0.8)
+            b.contentTintColor = NSColor.systemBlue.withAlphaComponent(0.9)
         } else {
             b.contentTintColor = NSColor.systemBlue
         }
@@ -605,7 +608,7 @@ class NotchContentView: NSView {
         let centerBlockX = artMaxX + (eqX - artMaxX) / 2
 
         let textW: CGFloat = 240
-        let topY = bounds.height - 35
+        let topY = bounds.height - 25
         
         expandedTitle.frame = NSRect(x: centerBlockX - textW/2, y: topY - 20, width: textW, height: 20)
         expandedArtist.frame = NSRect(x: centerBlockX - textW/2, y: topY - 40, width: textW, height: 16)
@@ -628,8 +631,8 @@ class NotchContentView: NSView {
         expandedNext.frame = NSRect(x: centerBlockX + spacing + playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
         
         let returnBtnW: CGFloat = 200
-        let returnBtnH: CGFloat = 16
-        returnButton.frame = NSRect(x: centerBlockX - returnBtnW/2, y: 4, width: returnBtnW, height: returnBtnH)
+        let returnBtnH: CGFloat = 24
+        returnButton.frame = NSRect(x: centerBlockX - returnBtnW/2, y: 12, width: returnBtnW, height: returnBtnH)
     }
 
     // MARK: - State Management
