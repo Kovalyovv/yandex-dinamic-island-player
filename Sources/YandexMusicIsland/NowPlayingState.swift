@@ -13,6 +13,7 @@ class NowPlayingState {
     var playbackRate: Double = 0
     var contentItemIdentifier: String = ""
 
+    var activeBundleID: String = ""
     var isHijacked: Bool = false
     var lastMusicAppName: String = ""
     var lastMusicAppBundleID: String = ""

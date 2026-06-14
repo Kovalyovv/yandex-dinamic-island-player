@@ -13,9 +13,9 @@ class NotchPanel: NSPanel {
     private(set) var isExpanded: Bool = false
 
     init() {
-        // ALWAYS keep the height at 140. This prevents macOS from hiding the window behind the notch!
+        // ALWAYS keep the height at 150/185. This prevents macOS from hiding the window behind the notch!
         let w = NotchContentView.expandedWidth
-        let h = NotchContentView.expandedHeight
+        let h: CGFloat = 150
         
         let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main ?? NSScreen.screens[0]
         let x = screen.frame.midX - w / 2.0
@@ -64,12 +64,22 @@ class NotchPanel: NSPanel {
         let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main ?? NSScreen.screens[0]
 
         let w = NotchContentView.expandedWidth
-        let h = NotchContentView.expandedHeight
+        let cv = contentView as? NotchContentView
+        let h = cv?.currentExpandedHeight ?? 150
+        
         let x = screen.frame.midX - w / 2.0
         let y = screen.frame.maxY - h
 
         let newFrame = NSRect(x: x, y: y, width: w, height: h)
-        setFrame(newFrame, display: true)
+        if self.isVisible && self.alphaValue > 0 && self.frame.height != h {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.2
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.animator().setFrame(newFrame, display: true)
+            }
+        } else {
+            setFrame(newFrame, display: true)
+        }
     }
 
     // MARK: - Event Handling

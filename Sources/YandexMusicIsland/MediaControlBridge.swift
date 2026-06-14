@@ -154,6 +154,7 @@ class MediaControlBridge {
                 if self.state.isValidPayload(payload) {
                     self.determineBundleID(payload: payload) { [weak self] activeBundleID in
                         guard let self = self else { return }
+                        self.state.activeBundleID = activeBundleID
                         if self.allowedMusicApps.contains(activeBundleID) {
                             self.state.isHijacked = false
                             self.state.lastMusicAppBundleID = activeBundleID
@@ -234,6 +235,7 @@ class MediaControlBridge {
                 
                 self.determineBundleID(payload: payload) { [weak self] activeBundleID in
                     guard let self = self else { return }
+                    self.state.activeBundleID = activeBundleID
                     if self.allowedMusicApps.contains(activeBundleID) {
                         self.state.isHijacked = false
                         self.state.lastMusicAppBundleID = activeBundleID

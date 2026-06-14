@@ -16,8 +16,15 @@ class NotchContentView: NSView {
     var notchWidth: CGFloat = 240
     var expandedPlayerWidth: CGFloat = 440
 
-    static let expandedWidth: CGFloat = 1400
+    static let expandedWidth: CGFloat = 360
     static let expandedHeight: CGFloat = 175
+
+    var currentExpandedHeight: CGFloat {
+        if currentState?.isHijacked == true && !(currentState?.lastMusicAppName.isEmpty ?? true) {
+            return 185
+        }
+        return 150
+    }
 
     // MARK: - Background
     private let bgView: NSVisualEffectView = {
@@ -247,41 +254,8 @@ class NotchContentView: NSView {
     }
 
     private func openPlayingApp() {
-        // Run nowplaying-cli get-raw to find bundle ID
-        DispatchQueue.global(qos: .userInitiated).async {
-            let task = Process()
-            // We use standard shell to resolve nowplaying-cli from PATH or fallback to hardcoded path
-            task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            task.arguments = ["-c", "/opt/homebrew/bin/nowplaying-cli get-raw || nowplaying-cli get-raw"]
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            do {
-                try task.run()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let str = String(data: data, encoding: .utf8) {
-                    if let range = str.range(of: "kMRMediaRemoteNowPlayingInfoClientBundleIdentifier = \"([^\"]+)\"", options: .regularExpression) {
-                        let match = String(str[range])
-                        let components = match.components(separatedBy: "\"")
-                        if components.count >= 2 {
-                            let bundleId = components[1]
-                            let openTask = Process()
-                            openTask.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                            openTask.arguments = ["-b", bundleId]
-                            try? openTask.run()
-                            return
-                        }
-                    }
-                }
-            } catch {
-                print("Failed to run nowplaying-cli")
-            }
-            
-            // Fallback to Yandex Music if nowplaying-cli isn't found or fails
-            let openTask = Process()
-            openTask.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            openTask.arguments = ["-b", "ru.yandex.desktop.music"]
-            try? openTask.run()
-        }
+        guard let bundleID = currentState?.activeBundleID, !bundleID.isEmpty else { return }
+        NSWorkspace.shared.launchApplication(withBundleIdentifier: bundleID, options: [], additionalEventParamDescriptor: nil, launchIdentifier: nil)
     }
 
     private func setup() {
@@ -574,11 +548,14 @@ class NotchContentView: NSView {
             returnButton.isHidden = true
             
             placeholderContainer.isHidden = false
-            placeholderContainer.frame = bounds
-            
-            placeholderTitle.frame = NSRect(x: 0, y: bounds.height - 50, width: bounds.width, height: 24)
-            placeholderSubtitle.frame = NSRect(x: 0, y: bounds.height - 75, width: bounds.width, height: 20)
-            launcherStack.frame = NSRect(x: 0, y: bounds.height - 130, width: bounds.width, height: 40)
+            placeholderContainer.frame = NSRect(x: 0, y: bounds.height - currentExpandedHeight, width: bounds.width, height: currentExpandedHeight)
+            let phW: CGFloat = 280
+            let phTop = currentExpandedHeight - 30
+            placeholderTitle.frame = NSRect(x: (bounds.width - phW) / 2, y: phTop - 20, width: phW, height: 20)
+            placeholderSubtitle.frame = NSRect(x: (bounds.width - phW) / 2, y: phTop - 45, width: phW, height: 20)
+
+            let stackW: CGFloat = 200
+            launcherStack.frame = NSRect(x: (bounds.width - stackW) / 2, y: phTop - 90, width: stackW, height: 40)
             return
         }
         
@@ -594,21 +571,24 @@ class NotchContentView: NSView {
         expandedEq.isHidden = false
         placeholderContainer.isHidden = true
 
+        let effectiveHeight = currentExpandedHeight
+        let yOffset = bounds.height - effectiveHeight
+
         let margin: CGFloat = 20
         let artSize: CGFloat = 80
-        expandedArtwork.frame = NSRect(x: margin, y: (bounds.height - artSize) / 2, width: artSize, height: artSize)
+        expandedArtwork.frame = NSRect(x: margin, y: yOffset + (effectiveHeight - artSize) / 2, width: artSize, height: artSize)
 
         let eqW: CGFloat = 24
         let eqH: CGFloat = 20
         let eqX = bounds.width - margin - eqW
-        expandedEq.frame = NSRect(x: eqX, y: (bounds.height - eqH) / 2, width: eqW, height: eqH)
+        expandedEq.frame = NSRect(x: eqX, y: yOffset + (effectiveHeight - eqH) / 2, width: eqW, height: eqH)
 
         // Calculate the exact center between the artwork and the EQ to ensure perfectly equal gaps
         let artMaxX = expandedArtwork.frame.maxX
         let centerBlockX = artMaxX + (eqX - artMaxX) / 2
 
         let textW: CGFloat = 240
-        let topY = bounds.height - 25
+        let topY = bounds.height - 35
         
         expandedTitle.frame = NSRect(x: centerBlockX - textW/2, y: topY - 20, width: textW, height: 20)
         expandedArtist.frame = NSRect(x: centerBlockX - textW/2, y: topY - 40, width: textW, height: 16)
@@ -630,9 +610,11 @@ class NotchContentView: NSView {
         expandedPrev.frame = NSRect(x: centerBlockX - spacing - playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
         expandedNext.frame = NSRect(x: centerBlockX + spacing + playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
         
-        let returnBtnW: CGFloat = 200
-        let returnBtnH: CGFloat = 24
-        returnButton.frame = NSRect(x: centerBlockX - returnBtnW/2, y: 12, width: returnBtnW, height: returnBtnH)
+        if effectiveHeight == 185 {
+            let returnBtnW: CGFloat = 200
+            let returnBtnH: CGFloat = 24
+            returnButton.frame = NSRect(x: centerBlockX - returnBtnW/2, y: yOffset + 12, width: returnBtnW, height: returnBtnH)
+        }
     }
 
     // MARK: - State Management
@@ -700,6 +682,7 @@ class NotchContentView: NSView {
 
     func update(with state: NowPlayingState) {
         let previousHasTrack = currentState?.hasTrack ?? false
+        let previousHijacked = currentState?.isHijacked ?? false
         currentState = state
 
         if previousHasTrack != state.hasTrack {
@@ -724,10 +707,22 @@ class NotchContentView: NSView {
         }
         
         if state.isHijacked && !state.lastMusicAppName.isEmpty {
+            let wasHidden = returnButton.isHidden
             returnButton.title = "Вернуться в \(state.lastMusicAppName)"
             returnButton.isHidden = false
+            if wasHidden {
+                if let window = self.window as? NotchPanel {
+                    window.repositionAtNotch()
+                }
+            }
         } else {
+            let wasHidden = returnButton.isHidden
             returnButton.isHidden = true
+            if !wasHidden {
+                if let window = self.window as? NotchPanel {
+                    window.repositionAtNotch()
+                }
+            }
         }
 
         let symbolName = state.isPlaying ? "pause.fill" : "play.fill"
