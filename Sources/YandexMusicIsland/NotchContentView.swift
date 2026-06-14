@@ -809,34 +809,11 @@ class NotchContentView: NSView {
     
     @objc private func returnToMusicApp() {
         guard let bundleID = currentState?.lastMusicAppBundleID else { return }
-        
-        if bundleID == "com.apple.Music" {
-            NSAppleScript(source: "tell application id \"com.apple.Music\" to play")?.executeAndReturnError(nil)
-            return
-        }
-
-        if bundleID == "com.spotify.client" {
-            NSAppleScript(source: "tell application id \"com.spotify.client\" to play")?.executeAndReturnError(nil)
-            return
-        }
 
         let runningApps = NSWorkspace.shared.runningApplications
         if let targetApp = runningApps.first(where: { $0.bundleIdentifier == bundleID }) {
             DispatchQueue.main.async {
-                let currentApp = NSWorkspace.shared.frontmostApplication
                 targetApp.activate(options: [])
-                
-                DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) {
-                    let task = Process()
-                    task.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/nowplaying-cli")
-                    task.arguments = ["play"]
-                    try? task.run()
-                    task.waitUntilExit()
-                    
-                    DispatchQueue.main.async {
-                        currentApp?.activate(options: [])
-                    }
-                }
             }
         }
     }
