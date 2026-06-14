@@ -403,21 +403,29 @@ class NotchContentView: NSView {
     private func performLayout(animated: Bool) {
         let b = bounds
         let centerX = b.width / 2
-        let topY = b.height - menuBarHeight
+        
+        let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main
+        let actualMenuBarHeight = screen.flatMap { $0.frame.maxY - $0.visibleFrame.maxY } ?? menuBarHeight
+        let actualMBH = actualMenuBarHeight > 10 ? actualMenuBarHeight : menuBarHeight
+        
+        let compactHeight: CGFloat = 37
+        let y2 = b.height
+        let y1 = b.height - actualMBH
+        let topY = y1 + ((y2 - y1) - compactHeight) / 2.0
         
         let pillX = centerX - notchWidth / 2 - compactPillWidth
         let playerMaxX = centerX - notchWidth / 2
         let playerX = playerMaxX - expandedPlayerWidth
 
-        let compactRect = NSRect(x: pillX, y: topY, width: compactPillWidth, height: menuBarHeight)
+        let compactRect = NSRect(x: pillX, y: topY, width: compactPillWidth, height: compactHeight)
         let expandedRect = NSRect(x: playerX, y: 0, width: expandedPlayerWidth, height: b.height)
 
         // Update fixed layouts inside containers
-        layoutCompactContainer(NSRect(x: 0, y: 0, width: compactPillWidth, height: menuBarHeight))
+        layoutCompactContainer(NSRect(x: 0, y: 0, width: compactPillWidth, height: compactHeight))
         layoutExpandedContainer(NSRect(x: 0, y: 0, width: expandedPlayerWidth, height: b.height))
 
         let targetBgRect = isExpanded ? expandedRect : compactRect
-        let targetRadius: CGFloat = isExpanded ? 24 : 18
+        let targetRadius: CGFloat = isExpanded ? 24 : 12
 
         var trackingRect = targetBgRect
         if !isExpanded, currentState?.hasTrack == true {
