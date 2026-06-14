@@ -16,7 +16,7 @@ class NotchContentView: NSView {
     var notchWidth: CGFloat = 240
     var expandedPlayerWidth: CGFloat = 440
 
-    static let expandedWidth: CGFloat = 360
+    static let expandedWidth: CGFloat = 1400
     static let expandedHeight: CGFloat = 175
 
     var currentExpandedHeight: CGFloat {
