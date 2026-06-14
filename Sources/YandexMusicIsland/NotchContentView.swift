@@ -841,9 +841,15 @@ class NotchContentView: NSView {
                 DispatchQueue.main.async {
                     let currentApp = NSWorkspace.shared.frontmostApplication
                     appToPause.activate(options: [])
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        self.mediaBridge?.sendCommand(command)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    
+                    DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) {
+                        let task = Process()
+                        task.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/nowplaying-cli")
+                        task.arguments = [command]
+                        try? task.run()
+                        task.waitUntilExit()
+                        
+                        DispatchQueue.main.async {
                             currentApp?.activate(options: [])
                         }
                     }
