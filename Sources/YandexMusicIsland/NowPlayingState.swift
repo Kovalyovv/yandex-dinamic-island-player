@@ -13,6 +13,10 @@ class NowPlayingState {
     var playbackRate: Double = 0
     var contentItemIdentifier: String = ""
 
+    var isHijacked: Bool = false
+    var lastMusicAppName: String = ""
+    var lastMusicAppBundleID: String = ""
+
     var ignorePositionUpdatesUntil: Date?
 
     /// Check if the incoming payload represents a valid music stream (not a live stream/Twitch)
@@ -26,7 +30,7 @@ class NowPlayingState {
         }
         
         if incomingTitle.isEmpty && incomingArtist.isEmpty { return false }
-        if incomingDuration.isNaN || incomingDuration <= 0 { return false }
+        // Allow streams (duration == 0)
         return true
     }
 

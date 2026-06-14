@@ -53,6 +53,68 @@ class MediaControlBridge {
         "com.apple.Music",
         "com.soundcloud.desktop"
     ]
+    
+    private let appNames = [
+        "ru.yandex.desktop.music": "Яндекс Музыку",
+        "com.apple.Music": "Apple Music",
+        "com.spotify.client": "Spotify",
+        "com.soundcloud.desktop": "SoundCloud"
+    ]
+
+    private var lastKnownContentIdentifier = ""
+    private var lastKnownBundleID = ""
+    private var isFetchingBundleID = false
+    private var pendingBundleIDCallbacks: [(String) -> Void] = []
+    
+    private func determineBundleID(payload: [String: Any], completion: @escaping (String) -> Void) {
+        let currentIdentifier = (payload["title"] as? String) ?? ""
+        
+        if currentIdentifier == lastKnownContentIdentifier && !lastKnownBundleID.isEmpty {
+            completion(lastKnownBundleID)
+            return
+        }
+        
+        if isFetchingBundleID {
+            pendingBundleIDCallbacks.append(completion)
+            return
+        }
+        
+        lastKnownContentIdentifier = currentIdentifier
+        isFetchingBundleID = true
+        pendingBundleIDCallbacks.append(completion)
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var activeBundleID = ""
+            var cliPath = "/opt/homebrew/bin/nowplaying-cli"
+            if !FileManager.default.fileExists(atPath: cliPath) {
+                cliPath = "/usr/local/bin/nowplaying-cli"
+            }
+            if FileManager.default.fileExists(atPath: cliPath) {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: cliPath)
+                task.arguments = ["get-raw"]
+                let pipe = Pipe()
+                task.standardOutput = pipe
+                if (try? task.run()) != nil {
+                    task.waitUntilExit()
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let bundle = json["kMRMediaRemoteNowPlayingInfoClientBundleIdentifier"] as? String {
+                        activeBundleID = bundle
+                    }
+                }
+            }
+            
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.lastKnownBundleID = activeBundleID
+                self.isFetchingBundleID = false
+                let callbacks = self.pendingBundleIDCallbacks
+                self.pendingBundleIDCallbacks.removeAll()
+                callbacks.forEach { $0(activeBundleID) }
+            }
+        }
+    }
 
     private func isAnyAllowedMusicAppRunning() -> Bool {
         return NSWorkspace.shared.runningApplications.contains { app in
@@ -90,10 +152,20 @@ class MediaControlBridge {
                 let payload = (dict["payload"] as? [String: Any]) ?? dict
                 guard self.isAnyAllowedMusicAppRunning() else { return }
                 if self.state.isValidPayload(payload) {
-                    self.state.update(from: payload)
-                    DispatchQueue.main.async { [weak self] in
+                    self.determineBundleID(payload: payload) { [weak self] activeBundleID in
                         guard let self = self else { return }
-                        self.onUpdate?(self.state)
+                        if self.allowedMusicApps.contains(activeBundleID) {
+                            self.state.isHijacked = false
+                            self.state.lastMusicAppBundleID = activeBundleID
+                            self.state.lastMusicAppName = self.appNames[activeBundleID] ?? "Плеер"
+                        } else {
+                            self.state.isHijacked = true
+                        }
+                        self.state.update(from: payload)
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self = self else { return }
+                            self.onUpdate?(self.state)
+                        }
                     }
                 }
             }
@@ -155,16 +227,26 @@ class MediaControlBridge {
                 let payload = (dict["payload"] as? [String: Any]) ?? dict
                 guard self.isAnyAllowedMusicAppRunning() else { continue }
                 
-                // Completely ignore payloads from live streams (e.g. Twitch)
+                // Completely ignore payloads from empty streams
                 if !self.state.isValidPayload(payload) {
                     continue
                 }
                 
-                self.state.update(from: payload)
-                
-                DispatchQueue.main.async { [weak self] in
+                self.determineBundleID(payload: payload) { [weak self] activeBundleID in
                     guard let self = self else { return }
-                    self.onUpdate?(self.state)
+                    if self.allowedMusicApps.contains(activeBundleID) {
+                        self.state.isHijacked = false
+                        self.state.lastMusicAppBundleID = activeBundleID
+                        self.state.lastMusicAppName = self.appNames[activeBundleID] ?? "Плеер"
+                    } else {
+                        self.state.isHijacked = true
+                    }
+                    self.state.update(from: payload)
+                    
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.onUpdate?(self.state)
+                    }
                 }
             }
         }

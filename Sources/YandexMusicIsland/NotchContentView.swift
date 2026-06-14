@@ -177,6 +177,20 @@ class NotchContentView: NSView {
         return EqualizerBarsView(frame: .zero)
     }()
 
+    private let returnButton: NSButton = {
+        let b = NSButton(title: "Вернуться в Яндекс Музыку", target: nil, action: #selector(returnToMusicApp))
+        b.isBordered = false
+        b.bezelStyle = .inline
+        if #available(macOS 14.0, *) {
+            b.contentTintColor = NSColor.systemBlue.withAlphaComponent(0.8)
+        } else {
+            b.contentTintColor = NSColor.systemBlue
+        }
+        b.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        b.isHidden = true
+        return b
+    }()
+
     // MARK: - Placeholder UI
     private let placeholderContainer: NSView = {
         let v = NSView()
@@ -298,6 +312,11 @@ class NotchContentView: NSView {
         expandedContainer.addSubview(expandedProgress)
         expandedContainer.addSubview(expandedElapsed)
         expandedContainer.addSubview(expandedDuration)
+        expandedContainer.addSubview(expandedPrev)
+        expandedContainer.addSubview(expandedPlayPause)
+        expandedContainer.addSubview(expandedNext)
+        expandedContainer.addSubview(expandedEq)
+        expandedContainer.addSubview(returnButton)
 
         expandedProgress.onSeek = { [weak self] percentage in
             guard let self = self, let state = self.currentState, state.duration > 0 else { return }
@@ -311,11 +330,6 @@ class NotchContentView: NSView {
             
             self.mediaBridge?.sendCommand("seek", String(targetSeconds))
         }
-
-        expandedContainer.addSubview(expandedPrev)
-        expandedContainer.addSubview(expandedPlayPause)
-        expandedContainer.addSubview(expandedNext)
-        expandedContainer.addSubview(expandedEq)
 
         // Add placeholder
         expandedContainer.addSubview(placeholderContainer)
@@ -335,6 +349,8 @@ class NotchContentView: NSView {
         expandedPlayPause.action = #selector(togglePlayPause)
         expandedNext.target = self
         expandedNext.action = #selector(nextTrack)
+        returnButton.target = self
+        returnButton.action = #selector(returnToMusicApp)
 
         // Timer
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -552,6 +568,7 @@ class NotchContentView: NSView {
             expandedNext.isHidden = true
             expandedPrev.isHidden = true
             expandedEq.isHidden = true
+            returnButton.isHidden = true
             
             placeholderContainer.isHidden = false
             placeholderContainer.frame = bounds
@@ -609,6 +626,10 @@ class NotchContentView: NSView {
         expandedPlayPause.frame = NSRect(x: centerBlockX - playSize/2, y: controlsY - playSize/2 + 4, width: playSize, height: playSize)
         expandedPrev.frame = NSRect(x: centerBlockX - spacing - playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
         expandedNext.frame = NSRect(x: centerBlockX + spacing + playSize/2 - btnSize/2, y: controlsY - btnSize/2 + 4, width: btnSize, height: btnSize)
+        
+        let returnBtnW: CGFloat = 200
+        let returnBtnH: CGFloat = 16
+        returnButton.frame = NSRect(x: centerBlockX - returnBtnW/2, y: 4, width: returnBtnW, height: returnBtnH)
     }
 
     // MARK: - State Management
@@ -691,6 +712,21 @@ class NotchContentView: NSView {
             compactMarquee.text = state.title
         }
         
+        if state.isPlaying {
+            compactEq.start()
+            expandedEq.start()
+        } else {
+            compactEq.stop()
+            expandedEq.stop()
+        }
+        
+        if state.isHijacked && !state.lastMusicAppName.isEmpty {
+            returnButton.title = "Вернуться в \(state.lastMusicAppName)"
+            returnButton.isHidden = false
+        } else {
+            returnButton.isHidden = true
+        }
+
         let symbolName = state.isPlaying ? "pause.fill" : "play.fill"
         let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 22, weight: .bold))
         expandedPlayPause.image = img
@@ -769,6 +805,40 @@ class NotchContentView: NSView {
 
     @objc private func nextTrack() {
         sendTargetedCommand("next-track")
+    }
+    
+    @objc private func returnToMusicApp() {
+        guard let bundleID = currentState?.lastMusicAppBundleID else { return }
+        
+        if bundleID == "com.apple.Music" {
+            NSAppleScript(source: "tell application id \"com.apple.Music\" to play")?.executeAndReturnError(nil)
+            return
+        }
+
+        if bundleID == "com.spotify.client" {
+            NSAppleScript(source: "tell application id \"com.spotify.client\" to play")?.executeAndReturnError(nil)
+            return
+        }
+
+        let runningApps = NSWorkspace.shared.runningApplications
+        if let targetApp = runningApps.first(where: { $0.bundleIdentifier == bundleID }) {
+            DispatchQueue.main.async {
+                let currentApp = NSWorkspace.shared.frontmostApplication
+                targetApp.activate(options: [])
+                
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) {
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/nowplaying-cli")
+                    task.arguments = ["play"]
+                    try? task.run()
+                    task.waitUntilExit()
+                    
+                    DispatchQueue.main.async {
+                        currentApp?.activate(options: [])
+                    }
+                }
+            }
+        }
     }
 
     private func sendTargetedCommand(_ command: String) {
