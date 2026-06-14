@@ -713,11 +713,11 @@ class NotchContentView: NSView {
         }
         
         if state.isPlaying {
-            compactEq.start()
-            expandedEq.start()
+            compactEq.isAnimating = true
+            expandedEq.isAnimating = true
         } else {
-            compactEq.stop()
-            expandedEq.stop()
+            compactEq.isAnimating = false
+            expandedEq.isAnimating = false
         }
         
         if state.isHijacked && !state.lastMusicAppName.isEmpty {

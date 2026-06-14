@@ -24,11 +24,6 @@ class NowPlayingState {
         let incomingTitle = dict["title"] as? String ?? ""
         let incomingArtist = dict["artist"] as? String ?? ""
         
-        var incomingDuration: Double = 0
-        if let num = dict["duration"] as? NSNumber {
-            incomingDuration = num.doubleValue
-        }
-        
         if incomingTitle.isEmpty && incomingArtist.isEmpty { return false }
         // Allow streams (duration == 0)
         return true
